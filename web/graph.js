@@ -133,7 +133,7 @@ const AGENT_LABEL = { running: 'running', finished: 'finished', ended: 'ended' }
 function glyph(kind, x, y) {
   switch (kind) {
     case 'working': case 'running': return `<path class="arc" d="M${x - 5},${y} a5,5 0 1 1 5,5"></path>`;
-    case 'question': return `<circle cx="${x}" cy="${y}" r="6" fill="var(--needs)"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:#16120A">?</text>`;
+    case 'question': return `<circle cx="${x}" cy="${y}" r="6" fill="var(--needs)"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:var(--on-needs)">?</text>`;
     case 'permission': return `<path d="M${x},${y - 6} L${x + 6},${y} L${x},${y + 6} L${x - 6},${y} Z" fill="var(--needs)"></path>`;
     case 'followup': return `<circle cx="${x}" cy="${y}" r="5.5" fill="none" stroke="var(--needs)" stroke-width="1.5"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:var(--needs)">?</text>`;
     case 'finished': return `<path d="M${x - 5},${y} l3.5,3.5 l6.5,-7" fill="none" stroke="var(--ready)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>`;

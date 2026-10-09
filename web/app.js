@@ -431,6 +431,7 @@ function setupUI() {
   document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.popover, #attention-badge, #settings-btn')) closePops(); });
   window.addEventListener('resize', () => { if (!$('attention-pop').hidden) positionPop(); });
   $('summaries-mode').onchange = (e) => post('/api/settings', { summaries: e.target.value });
+  $('theme-mode').onchange = (e) => applyTheme(e.target.value);
   $('summaries-refresh').onchange = (e) => post('/api/settings', { summaryRefreshMinutes: Number(e.target.value) });
   document.querySelectorAll('#stream-tools .seg-btn').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   $('thinking-toggle').addEventListener('click', toggleThinking);
@@ -457,6 +458,13 @@ function setupUI() {
   window.addEventListener('hashchange', () => selectFromHash());
   window.addEventListener('resize', () => fitView(false));
 }
+
+function applyTheme(mode) {
+  if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode; else delete document.documentElement.dataset.theme;
+  $('theme-mode').value = mode;
+  try { localStorage.setItem('radar.theme', mode); } catch { /* optional */ }
+}
+try { applyTheme(localStorage.getItem('radar.theme') || 'auto'); } catch { applyTheme('auto'); }
 
 setInterval(() => { if (state.snap && !$('attention-pop').hidden) renderAttentionPop(); }, 5000);
 try { const m = localStorage.getItem('radar.mode'); if (m === 'all' || m === 'active') state.mode = m; state.transcriptOpen = localStorage.getItem('radar.transcript') === '1'; } catch { /* optional */ }

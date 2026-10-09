@@ -40,7 +40,9 @@ Radar should feel like a quiet instrument panel beside a terminal: monochrome an
 
 ## C. Tokens
 
-### Colour (dark only; delete the light-theme block)
+### Colour
+
+Dark is the default and follows the system; a light theme with the same roles exists (`@media (prefers-color-scheme: light)` and `[data-theme="light"]`), and settings has a theme switch (follow system / light / dark, stored in the browser). Both palettes keep text at or above 4.5:1 on their surfaces; `--text-3` is `#7B8594` dark and `#6B7585` light for that reason, and `--ended` is `#6B7383` dark so ended labels stay legible.
 
 | Token | Hex | Role |
 |---|---|---|
@@ -51,11 +53,11 @@ Radar should feel like a quiet instrument panel beside a terminal: monochrome an
 | `--line-strong` | `#38414F` | bus trunk, popover border, buttons |
 | `--text` | `#E8E6E1` | primary |
 | `--text-2` | `#9AA3B2` | secondary |
-| `--text-3` | `#626B7A` | tertiary, labels, ages |
+| `--text-3` | `#7B8594` | tertiary, labels, ages |
 | `--working` | `#5EA2E6` | working / running; the only blue |
 | `--needs` | `#F0A93B` | needs you (question, permission, follow-up) |
 | `--ready` | `#52B08E` | ready for a prompt; finished agents |
-| `--ended` | `#4B5563` | ended sessions and agents |
+| `--ended` | `#6B7383` | ended sessions and agents |
 | `--error` | `#E5655F` | tool errors, disconnected |
 | `--thinking` | `#A394D9` | thinking rows only |
 | `--link` | `#B9C3D3` | text links, underlined; never blue |
