@@ -9,6 +9,7 @@ import { normalizeHookEvent, applyHookEvent, emptyHookState } from './hook-event
 import { hasRadarHooks } from './hooks-install.mjs';
 import { transcriptPathFor, projectsDir, radarDir } from './paths.mjs';
 import { buildDigest } from './summarizer.mjs';
+import { focusProcess } from './focus.mjs';
 
 const ATTENTION = new Set(['question', 'permission', 'done']);
 const EXITED_TTL_MS = 6 * 60 * 60 * 1000;
@@ -324,6 +325,13 @@ export class RadarStore extends EventEmitter {
   onSummaryError(id, err) {
     const s = this.sessions.get(id); if (!s) return;
     s.summaryError = err.message; this._version = ''; this.emit('change', this.snapshot());
+  }
+
+  /** Bring the terminal running this session to the front (best effort, see focus.mjs). */
+  focus(id) {
+    const s = this.sessions.get(id);
+    if (!s || !s.alive) return { ok: false, reason: 'session is not running' };
+    return focusProcess({ pid: s.pid, cwd: s.cwd, custom: this.settings.focusCommand || null });
   }
 
   setSettings(patch) { this.settings = { ...this.settings, ...patch }; this._saveState(); this._version = ''; }
