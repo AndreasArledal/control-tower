@@ -5,24 +5,32 @@ Local mission control for [Claude Code](https://code.claude.com). One page that 
 Nothing leaves your machine. Radar only reads the files Claude Code already writes under `~/.claude`.
 
 ```
-┌─ Needs you ─────────┬───────────────────────────────────────────┬─ Detail ─────────────────┐
-│ worky · finished    │  [session: Hemnet strategy]──[agent]       │ title, state, stats      │
-│ hub · has a question│                             ├─[agent]     │ one-line summary         │
-├─ Projects ──────────┤  [session: Radar build]─────[agent]       │ reasoning stream:        │
-│ ● ai-enablement 2/3 │                                            │  you / thinking / tools  │
-│ ○ dotfiles      1   │                                            │  / replies, live         │
-└─────────────────────┴───────────────────────────────────────────┴──────────────────────────┘
+┌ ● Radar  4 live · 2 agents running                          ⬤2  ⚙ ┐
+├ [All] [● .claude 2] [● worky 1] [○ ai-enablement 1] [○ dotfiles 1] ┤
+│                                                                    │
+│  worky   Improving market strategy and package pricing             │
+│  ┌ session ───────────┐──┌ agent ────────┐                         │
+│  │ title              │  │ code-reviewer │                         │
+│  │ what it does now   │──└───────────────┘                         │
+│  │ ? question · 2m    │──┌ agent ────────┐   ┌ drawer, on demand ┐ │
+│  └────────────────────┘  │ click-test UI │   │ title · state     │ │
+│                          └───────────────┘   │ summary · stats   │ │
+│  ai-enablement   Developing the AI strategy  │ reasoning stream  │ │
+│  ┌ session ───────────┐                      │ you / thinking /  │ │
+│  │ ...                │                      │ tools / replies   │ │
+└──└────────────────────┘──────────────────────└───────────────────┘─┘
 ```
 
 ## What you get
 
-- **Project list** on the left with the overall status of each directory that has sessions: how many are working, waiting for you, finished, idle. Click one to see its sessions; shift-click to add more; `all` shows everything.
-- **Graph** in the middle: each session is a node, each subagent hangs off the session (or off the agent that spawned it). Colour is state: blue working, amber waiting for you, mint finished, grey idle. Running agents' edges flow. Sessions with many finished agents fold them into one node you can expand.
-- **Detail panel** on the right: title, state, context size, turns, tool calls, model, a short written summary, and the live reasoning stream of the selected session or agent: your prompts, Claude's thinking, every tool call with its arguments and result, and replies. Filter by kind, follow the tail, load earlier.
-- **Needs you** tray plus in-page toasts (no OS notifications) when a session asks a question, waits for a permission, or finishes its turn. Press `n` to jump to the next one, `Esc` to clear, `f` to fit the graph.
-- **Summaries**: a small model (Haiku, run through your own `claude` login) writes a headline, progress and "what you need to do" for a session when it finishes or needs you. Automatic, on request only, or off; switch in the top bar. About a fifth of a cent per summary.
-- **Recent sessions** per project, so you can open a finished session and read what happened.
-- **Menu bar app** (macOS, optional): the same thing living in your top bar with a count of sessions that need you.
+- **The graph owns the page.** Two thin strips on top (status, project chips), then the canvas. Each session is a node; subagents branch off it, nested agents off their parent. Blue is working, amber is waiting for you (`?` question, `◆` permission, pulsing ring), teal is finished (calm, no pulse), grey is idle. Finished agents fold into one "N more" node after the three most recent.
+- **Project headlines.** Each project gets a one-line "what is this project working on" above its sessions, written by the summariser from its live sessions (or built from session titles when summaries are off). The chips show the worst state in each project and an amber count of sessions needing you. Click a chip for one project, shift-click to add, `All` for everything.
+- **Drawer on demand.** Click a node and a panel slides over the right edge, without reflowing the graph: state, one-line summary, a stat strip, and the live reasoning stream (your prompts, thinking, every tool call with arguments and results, replies). Filter with `t` `u` `r`, follow the tail, load earlier. Click the node again or press `Esc` to close.
+- **Jump to terminal.** The drawer's first action focuses the terminal pane that runs the session: WezTerm, iTerm2, Terminal.app, tmux and kitty are detected from the process tree; anything else gets its app raised. A custom command can be set with the `focusCommand` setting (`{tty}`, `{pid}`, `{cwd}` placeholders).
+- **Copy resume command** (`cd <dir> && claude --resume <id>`) and **recent sessions** per project, so a finished session can be reopened or read.
+- **Needs you**, in the page only: an amber badge in the top bar with the count (flashes once when it grows, click for the list), pulsing rings on the nodes, a slim toast. Press `n` to jump to the next one. A finished session simply reads "finished" until you type again; there is nothing to acknowledge.
+- **Summaries**: Haiku, run through your own `claude` login, writes a headline and progress line for a session when it finishes or needs you, plus the project headlines. Automatic, on request, or off, in settings (`⚙`). About a fifth of a cent per summary.
+- **Menu bar app** (macOS, optional): the same thing in your top bar with the count of sessions that need you.
 
 ## Requirements
 
@@ -66,6 +74,10 @@ npm start
 
 The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, and opens the dashboard in a window. If a `claude-radar` server is already running on the port, the app attaches to it instead of starting another.
 
+## Keys
+
+`n` next session that needs you · `f` fit the graph (or toggle follow when the drawer is open) · `Esc` close · `+` `-` zoom · `t` `u` `r` toggle thinking, tools, replies · double-click empty canvas to fit · drag to pan, ⌘/ctrl-wheel to zoom.
+
 ## How it works
 
 Claude Code writes everything Radar needs:
@@ -77,7 +89,7 @@ Claude Code writes everything Radar needs:
 | `.../<session>/subagents/agent-*.jsonl` + `.meta.json` | Each subagent's transcript, description, type, spawn depth, parent tool call |
 | Hooks (optional) | `UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`, `AskUserQuestion` pre/post, `Subagent*`, `Session*` |
 
-The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step.
+The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step. The design rationale is in `docs/UI-REVAMP.md`.
 
 Run the tests with `node --test`.
 

@@ -8,12 +8,13 @@ import { SessionModel, resolveState, resolveAgentState } from './model.mjs';
 import { normalizeHookEvent, applyHookEvent, emptyHookState } from './hook-events.mjs';
 import { hasRadarHooks } from './hooks-install.mjs';
 import { transcriptPathFor, projectsDir, radarDir } from './paths.mjs';
-import { buildDigest } from './summarizer.mjs';
+import { buildDigest, buildProjectDigest } from './summarizer.mjs';
 import { focusProcess } from './focus.mjs';
 
 const ATTENTION = new Set(['question', 'permission', 'done']);
 const EXITED_TTL_MS = 6 * 60 * 60 * 1000;
 const SUMMARY_COOLDOWN_MS = 20_000;
+const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 const MAX_ENTRIES = 8000, KEEP_ENTRIES = 6000;
@@ -54,6 +55,7 @@ export class RadarStore extends EventEmitter {
     this.sessions = new Map();
     this.spoolDir = join(radarDir(home), 'events');
     this.stateFile = join(radarDir(home), 'state.json');
+    this.projectSummaries = new Map(); // cwd -> { headline, at, key }
     this._now = () => Date.now();
     this._timer = null; this._version = ''; this.hooksSeen = false; this.ticking = false; this.lastTickAt = null;
   }
@@ -270,7 +272,13 @@ export class RadarStore extends EventEmitter {
     const rank = { question: 5, permission: 5, done: 4, working: 3, idle: 2, exited: 1 };
     for (const p of byProject.values()) {
       p.state = Object.keys(p.counts).sort((a, b) => rank[b] - rank[a])[0] ?? 'idle';
-      p.runningAgents = sessions.filter((v) => v.cwd === p.id).reduce((n, v) => n + v.runningAgents, 0);
+      const mine = sessions.filter((v) => v.cwd === p.id);
+      p.runningAgents = mine.reduce((n, v) => n + v.runningAgents, 0);
+      const ps = this.projectSummaries.get(p.id);
+      p.headline = ps?.headline || fallbackHeadline(mine);
+      p.headlineSource = ps ? 'summary' : 'titles';
+      // active: something is happening, or someone touched it recently
+      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
     }
     const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
     const attention = sessions.filter((v) => v.needsYou).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
@@ -284,6 +292,7 @@ export class RadarStore extends EventEmitter {
 
   _deriveAndNotify() {
     const snap = this.snapshot();
+    for (const p of snap.projects) this._maybeSummarizeProject(p, snap.sessions.filter((v) => v.cwd === p.id));
     for (const v of snap.sessions) {
       const s = this.sessions.get(v.id);
       const prev = s.lastState; s.lastState = v.state;
@@ -303,6 +312,18 @@ export class RadarStore extends EventEmitter {
     this.requestSummary(s.id, { force: false });
   }
 
+  _maybeSummarizeProject(p, mine) {
+    if (!this.summarizer || this.settings.summaries !== 'auto' || !this.summarizer.available) return;
+    const live = mine.filter((v) => v.alive && v.turns > 0);
+    if (!live.length) return;
+    const key = `project:${p.id}:` + live.map((v) => `${v.id}@${v.summary?.at ?? 0}`).sort().join(',');
+    const have = this.projectSummaries.get(p.id);
+    if (have?.key === key) return;
+    const cached = this.summarizer.cached(key);
+    if (cached) { this.projectSummaries.set(p.id, { ...cached, key }); return; }
+    this.summarizer.request(`project:${p.id}`, key, () => buildProjectDigest(p, live));
+  }
+
   summaryKey(s) { return `${s.id}:${s.model.count}:${s.lastState}`; }
 
   requestSummary(id, { force = false } = {}) {
@@ -318,6 +339,7 @@ export class RadarStore extends EventEmitter {
   }
 
   onSummary(id, summary, key) {
+    if (id.startsWith('project:')) { this.projectSummaries.set(id.slice(8), { ...summary, key }); this._version = ''; this.emit('change', this.snapshot()); return; }
     const s = this.sessions.get(id); if (!s) return;
     s.summary = summary; s.summaryKey = key; s.summaryError = null; this._version = ''; this.emit('change', this.snapshot());
   }
@@ -390,6 +412,15 @@ export class RadarStore extends EventEmitter {
   async _saveState() {
     try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings })); } catch { /* best effort */ }
   }
+}
+
+/** Without a model: one title, or "N sessions: a, b". */
+function fallbackHeadline(sessions) {
+  const live = sessions.filter((v) => v.alive);
+  const pick = (live.length ? live : sessions).slice(0, 3);
+  if (!pick.length) return '';
+  if (pick.length === 1) return pick[0].title;
+  return pick.map((v) => clip(v.title, 40)).join(' · ');
 }
 
 import { readFileSync } from 'node:fs';

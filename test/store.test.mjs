@@ -42,6 +42,7 @@ test('store builds projects, sessions, agents and reacts to hook events', async 
   assert.equal(snap.projects.length, 1);
   assert.equal(snap.projects[0].path, '/p/a');
   assert.equal(snap.projects[0].name, 'a');
+  assert.equal(snap.projects[0].active, true);
   const s = snap.sessions.find((x) => x.id === sid);
   assert.equal(s.title, 'Building it');
   assert.equal(s.state, 'working');
@@ -126,5 +127,20 @@ test('timeline pages by seq and survives the entry cap', async () => {
   const before = store.timeline(sid, null, { before: 2, limit: 1 });
   assert.deepEqual(before.entries.map((e) => e.seq), [1]);
   assert.equal(before.hasMore, true);
+  store.stop();
+});
+
+test('projects carry a headline: session titles by default, the summarizer result when available', async () => {
+  const { home, sid } = fakeHome();
+  const results = [];
+  const fakeSummarizer = { available: true, lastError: null, lastRunAt: new Map(), cached: () => null, isQueued: () => false, request: (id, key, digestFn) => { results.push({ id, key, digest: digestFn() }); return true; } };
+  const store = new RadarStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto' } });
+  await store.tick();
+  assert.equal(store.snapshot().projects[0].headline, 'Building it');
+  const job = results.find((r) => r.id === 'project:/p/a');
+  assert.ok(job, 'a project summary was requested');
+  assert.match(job.digest, /Building it/);
+  store.onSummary('project:/p/a', { headline: 'Shipping the dashboard', progress: '', needs: '', at: 1 }, job.key);
+  assert.equal(store.snapshot().projects[0].headline, 'Shipping the dashboard');
   store.stop();
 });

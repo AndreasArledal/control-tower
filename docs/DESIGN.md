@@ -41,17 +41,21 @@ Per session, in priority order:
 5. registry busy, or transcript activity within 4 s → `working`
 6. otherwise `idle`
 
-Attention clears when the user acknowledges in the page, when a new prompt arrives, or (for permissions) when the transcript moves past the prompt.
+Attention clears when a new prompt arrives, or (for permissions) when the transcript moves past the prompt. `done` is a plain status with nothing to acknowledge.
 
 Agents: `done` on `SubagentStop`, on the parent's tool result (foreground agents only; background launches return immediately), or on a final `end_turn` text with no pending tool calls; `exited` with the session; otherwise `running`.
 
 ## Summaries
 
-Triggered automatically when a live session is first seen and whenever it enters `done`/`question`/`permission`; manually from the panel; never when the mode is `off`. One job at a time, 20 s cooldown per session, cached by `session:entryCount:state`. The digest is bounded (first prompt, last three prompts, last reply, last twelve tool calls, agents). Output is JSON `{headline, progress, needs}` enforced with `--json-schema`.
+Triggered automatically when a live session is first seen and whenever it enters `done`/`question`/`permission`; manually from the drawer; never when the mode is `off`. Project headlines are requested whenever the set of live sessions or their summaries change, keyed accordingly, and fall back to session titles. One job at a time, 20 s cooldown per session, cached by `session:entryCount:state`. The digest is bounded (first prompt, last three prompts, last reply, last twelve tool calls, agents). Output is JSON `{headline, progress, needs}` enforced with `--json-schema`.
+
+## Terminal focus
+
+`focus.mjs` maps a session's pid to its tty (`ps`), walks the process tree to find the hosting terminal, and builds a command plan per terminal (WezTerm CLI by tty, AppleScript for iTerm2 and Terminal.app, tmux by pane tty, kitty by env match, otherwise raise the app). A `focusCommand` setting overrides detection.
 
 ## Web
 
-Plain ES modules, no build. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked, agents to the right, finished agents folded after four), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
+Plain ES modules, no build. Layout per `docs/UI-REVAMP.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
 
 ## Menu bar app
 

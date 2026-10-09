@@ -35,6 +35,12 @@ export function buildDigest(view, entries, agentEntries = []) {
   return parts.join('\n\n');
 }
 
+/** Digest for a whole project: what its live sessions are up to. */
+export function buildProjectDigest(project, sessions) {
+  const lines = sessions.map((v) => `- ${clip(v.title, 100)} (${v.state})${v.summary?.headline ? ': ' + clip(v.summary.headline, 120) : v.lastPrompt ? ': ' + clip(v.lastPrompt, 160) : ''}`);
+  return `Project directory: ${project.path}\nSessions in it:\n${lines.join('\n')}\n\nIn the headline, say in at most 10 words what this project is working on overall. Leave progress and needs empty.`;
+}
+
 export function parseSummary(out) {
   if (!out || out.is_error) return null;
   let obj = out.structured_output;
