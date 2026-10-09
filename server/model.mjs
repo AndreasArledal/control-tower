@@ -130,11 +130,11 @@ export class SessionModel {
  * Collapse every signal about a live session into one state.
  * States: exited | permission | question | done | working | idle
  */
-export function resolveState({ alive, busy, doneAt, lastPromptAt, attention, pendingQuestion, ackedAt, lastActivityAt, now }) {
+export function resolveState({ alive, busy, doneAt, lastPromptAt, attention, pendingQuestion, lastActivityAt, now }) {
   if (!alive) return { state: 'exited', since: null };
   if (attention) return { state: attention.kind, since: attention.at, message: attention.message };
   if (pendingQuestion) return { state: 'question', since: pendingQuestion.ts ?? null, message: pendingQuestion.text };
-  if (doneAt && doneAt >= (lastPromptAt ?? 0) && !(ackedAt && ackedAt >= doneAt)) return { state: 'done', since: doneAt };
+  if (doneAt && doneAt >= (lastPromptAt ?? 0)) return { state: 'done', since: doneAt };
   if (busy || (lastActivityAt && now - lastActivityAt < WORKING_GRACE_MS)) return { state: 'working', since: lastPromptAt ?? lastActivityAt };
   return { state: 'idle', since: lastActivityAt };
 }

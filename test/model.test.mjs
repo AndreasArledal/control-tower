@@ -48,12 +48,11 @@ test('activity reports the running tool, thinking, responding, or question', () 
 });
 
 test('resolveState: exited beats everything, attention beats done, done beats working', () => {
-  const base = { alive: true, busy: false, doneAt: null, lastPromptAt: T0, attention: null, pendingQuestion: null, ackedAt: null, lastActivityAt: T0, now: T0 + 60_000 };
+  const base = { alive: true, busy: false, doneAt: null, lastPromptAt: T0, attention: null, pendingQuestion: null, lastActivityAt: T0, now: T0 + 60_000 };
   assert.equal(resolveState({ ...base, alive: false }).state, 'exited');
   assert.equal(resolveState({ ...base, attention: { kind: 'permission', at: T0 + 5 } }).state, 'permission');
   assert.equal(resolveState({ ...base, pendingQuestion: { text: 'x' } }).state, 'question');
   assert.equal(resolveState({ ...base, doneAt: T0 + 10 }).state, 'done');
-  assert.equal(resolveState({ ...base, doneAt: T0 + 10, ackedAt: T0 + 11 }).state, 'idle');
   assert.equal(resolveState({ ...base, doneAt: T0 - 10 }).state, 'idle', 'done before the last prompt is stale');
   assert.equal(resolveState({ ...base, busy: true }).state, 'working');
   assert.equal(resolveState({ ...base, lastActivityAt: T0 + 59_000 }).state, 'working', 'fresh transcript activity counts as working');

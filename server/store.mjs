@@ -36,7 +36,7 @@ class SessionRecord {
     this.alive = false; this.busy = false; this.prevBusy = null; this.flipDoneAt = null; this.lastSeenAliveAt = null;
     this.transcriptPath = null; this.tailer = null; this.model = new SessionModel(); this.entries = []; this.seq = 0;
     this.hooks = emptyHookState(); this.hooksSeen = false; this.attentionCount = null; this.agents = new Map(); this.agentsScanAt = 0;
-    this.summary = null; this.summaryKey = null; this.summaryError = null; this.ackedAt = null; this.loaded = false; this.lastState = null;
+    this.summary = null; this.summaryKey = null; this.summaryError = null; this.loaded = false; this.lastState = null;
     this.summarizedForState = null; this.pinned = false;
   }
 }
@@ -161,7 +161,6 @@ export class RadarStore extends EventEmitter {
         const lastTs = s.entries[s.entries.length - 1].ts;
         if (lastTs > s.hooks.attention.at) { s.hooks = { ...s.hooks, attention: null }; s.attentionCount = null; }
       }
-      if (fresh.some((e) => e.kind === 'prompt')) s.ackedAt = null;
     }
   }
 
@@ -239,7 +238,7 @@ export class RadarStore extends EventEmitter {
     const m = s.model;
     const attention = s.hooks.attention && s.alive ? s.hooks.attention : null;
     const doneAt = s.hooks.doneAt ?? s.flipDoneAt;
-    const r = resolveState({ alive: s.alive, busy: s.busy, doneAt, lastPromptAt: Math.max(m.lastPromptAt ?? 0, s.hooks.lastPromptAt ?? 0) || null, attention, pendingQuestion: m.pendingQuestion, ackedAt: s.ackedAt, lastActivityAt: m.lastActivityAt, now });
+    const r = resolveState({ alive: s.alive, busy: s.busy, doneAt, lastPromptAt: Math.max(m.lastPromptAt ?? 0, s.hooks.lastPromptAt ?? 0) || null, attention, pendingQuestion: m.pendingQuestion, lastActivityAt: m.lastActivityAt, now });
     const agents = [...s.agents.values()].map((a) => this._agentView(s, a)).sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
     const act = r.state === 'working' ? m.activity() : (r.state === 'question' ? { kind: 'question', label: r.message ?? '', since: r.since } : { kind: 'idle', label: '', since: r.since });
     return {
@@ -327,13 +326,6 @@ export class RadarStore extends EventEmitter {
     s.summaryError = err.message; this._version = ''; this.emit('change', this.snapshot());
   }
 
-  ack(id) {
-    const s = this.sessions.get(id); if (!s) return false;
-    s.ackedAt = this._now(); this._saveState(); return true;
-  }
-
-  ackAll() { for (const s of this.sessions.values()) s.ackedAt = this._now(); this._saveState(); }
-
   setSettings(patch) { this.settings = { ...this.settings, ...patch }; this._saveState(); this._version = ''; }
 
   timeline(sessionId, agentId, { after = -1, limit = 200, before = null } = {}) {
@@ -384,14 +376,11 @@ export class RadarStore extends EventEmitter {
     try {
       const st = JSON.parse(await readFile(this.stateFile, 'utf8'));
       if (st.settings) this.settings = { ...this.settings, ...st.settings };
-      for (const [id, at] of Object.entries(st.acked ?? {})) this._session(id).ackedAt = at;
     } catch { /* first run */ }
   }
 
   async _saveState() {
-    const acked = {};
-    for (const s of this.sessions.values()) if (s.ackedAt) acked[s.id] = s.ackedAt;
-    try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings, acked })); } catch { /* best effort */ }
+    try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings })); } catch { /* best effort */ }
   }
 }
 

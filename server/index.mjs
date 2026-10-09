@@ -50,13 +50,8 @@ export function createRadarServer({ store, webDir, hooksCtl }) {
       }
       if (p === '/api/history') return json(res, 200, await store.history(url.searchParams.get('cwd') ?? ''));
       if (req.method === 'POST') {
-        const m = p.match(/^\/api\/session\/([^/]+)\/(ack|summarize)$/);
-        if (m) {
-          const id = decodeURIComponent(m[1]);
-          if (m[2] === 'ack') return json(res, store.ack(id) ? 200 : 404, { ok: true });
-          return json(res, 200, { queued: store.requestSummary(id, { force: true }) });
-        }
-        if (p === '/api/ack-all') { store.ackAll(); return json(res, 200, { ok: true }); }
+        const m = p.match(/^\/api\/session\/([^/]+)\/summarize$/);
+        if (m) return json(res, 200, { queued: store.requestSummary(decodeURIComponent(m[1]), { force: true }) });
         if (p === '/api/settings') { store.setSettings(await readBody(req)); return json(res, 200, store.settings); }
         if (p === '/api/history/open') { const b = await readBody(req); await store.openHistory(b.cwd, b.id); return json(res, 200, { ok: true }); }
         if (p === '/api/hooks/install') return json(res, 200, await hooksCtl.install());

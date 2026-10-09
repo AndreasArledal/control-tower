@@ -32,7 +32,7 @@ function fakeHome() {
   return { home, sid, transcript: t, proj };
 }
 
-test('store builds projects, sessions, agents and reacts to hook events and acks', async () => {
+test('store builds projects, sessions, agents and reacts to hook events', async () => {
   const { home, sid, transcript } = fakeHome();
   const store = new RadarStore({ home, summarizer: null });
   let clock = 1_700_000_000_000 + 10_000;
@@ -60,11 +60,6 @@ test('store builds projects, sessions, agents and reacts to hook events and acks
   assert.equal(snap.sessions[0].state, 'done');
   assert.equal(snap.attention.length, 1);
   assert.equal(snap.hooksSeen, true);
-
-  store.ack(sid);
-  await store.tick();
-  assert.equal(store.snapshot().sessions[0].state, 'idle');
-  assert.equal(store.snapshot().attention.length, 0);
 
   // a new prompt makes it working again
   appendFileSync(transcript, L({ ...base(sid, 15), type: 'user', message: { role: 'user', content: 'Now test it' }, origin: { kind: 'human' } }));
