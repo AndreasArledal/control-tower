@@ -60,8 +60,8 @@ Summaries are produced by `claude -p` with every setting source, MCP server, too
 ### Menu bar app (macOS)
 
 ```sh
-cd app && pnpm install     # or npm install; downloads Electron
-pnpm start                 # or npm start
+cd app && npm install      # downloads Electron (about 100 MB)
+npm start
 ```
 
 The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, and opens the dashboard in a window. If a `claude-radar` server is already running on the port, the app attaches to it instead of starting another.

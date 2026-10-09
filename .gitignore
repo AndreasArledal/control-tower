@@ -2,4 +2,4 @@ node_modules/
 .DS_Store
 app/node_modules/
 app/dist/
-app/pnpm-lock.yaml
+app/package-lock.json

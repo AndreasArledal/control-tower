@@ -323,5 +323,6 @@ function setupSidebar() {
 setInterval(() => { if (state.snap) { renderAttention(state.snap); renderProjects(state.snap); } }, 5000);
 
 setupCanvas(); setupSidebar(); connect();
+window.addEventListener('hashchange', () => selectFromHash());
 let fitted = false;
 const fitOnce = setInterval(() => { if (state.scene?.nodes.length && !fitted) { fitView(); fitted = true; clearInterval(fitOnce); } }, 200);
