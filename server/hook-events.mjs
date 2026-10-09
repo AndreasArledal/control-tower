@@ -46,14 +46,16 @@ export function applyHookEvent(prev, e) {
       else if (e.notificationType === 'agent_needs_input' || e.notificationType === 'elicitation_dialog') s.attention = { kind: 'question', message: e.message || 'Needs your input', at: e.at };
       break;
     case 'PermissionRequest':
-      s.attention = { kind: 'permission', message: `Allow ${e.toolName ?? 'tool'}? ${toolLabel(e.toolName, e.toolInput)}`.trim(), at: e.at, toolUseId: e.toolUseId };
+      // Claude Code routes its own question dialog through the permission system
+      if (e.toolName === 'AskUserQuestion') s.attention = { kind: 'question', message: toolLabel('AskUserQuestion', e.toolInput), at: e.at, toolUseId: e.toolUseId };
+      else s.attention = { kind: 'permission', message: `Allow ${e.toolName ?? 'tool'}? ${toolLabel(e.toolName, e.toolInput)}`.trim(), at: e.at, toolUseId: e.toolUseId };
       break;
     case 'PreToolUse':
       if (e.toolName === 'AskUserQuestion') s.attention = { kind: 'question', message: toolLabel('AskUserQuestion', e.toolInput), at: e.at, toolUseId: e.toolUseId };
       break;
     case 'PostToolUse':
     case 'PostToolUseFailure':
-      if (e.toolName === 'AskUserQuestion' && s.attention?.kind === 'question') s.attention = null;
+      if (e.toolName === 'AskUserQuestion') s.attention = null;
       break;
     case 'SubagentStart':
       if (e.agentId) s.startedAgents.set(e.agentId, { type: e.agentType, at: e.at });

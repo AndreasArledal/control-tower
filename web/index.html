@@ -12,23 +12,24 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="live-dot" id="live-dot" title="Connecting"></span><span class="brand-name">Radar</span><span class="brand-sub" id="brand-sub">connecting…</span></div>
+  <div class="brand">
+    <svg class="mark" width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity=".55"/><circle class="mark-dot" cx="16" cy="16" r="2.2"/></svg>
+    <span class="brand-name">Radar</span>
+    <span class="live-dot" id="live-dot" title="Connecting"></span>
+  </div>
+  <div class="status" id="status" aria-live="polite"></div>
   <div class="topbar-right">
-    <button class="badge" id="attention-badge" hidden aria-label="Sessions that need you"><span id="attention-count">0</span></button>
+    <button class="badge" id="attention-badge" hidden aria-label="Sessions that need you"><span id="attention-count">0</span><span class="badge-label">need you</span></button>
     <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
     </button>
   </div>
 </header>
 
-<nav class="rail" id="rail" aria-label="Projects">
-  <button class="chip all selected" data-project="*">All</button>
-</nav>
+<nav class="rail" id="rail" aria-label="Projects"></nav>
 
 <main class="canvas-wrap" id="canvas-wrap">
-  <svg id="graph" class="graph" xmlns="http://www.w3.org/2000/svg">
-    <g id="viewport"></g>
-  </svg>
+  <svg id="graph" class="graph" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
   <div class="canvas-tools">
     <label class="toggle"><input type="checkbox" id="show-exited"> ended</label>
     <button class="tool" id="zoom-out" title="Zoom out (-)">−</button>
@@ -41,11 +42,12 @@
 <aside class="drawer" id="drawer" hidden aria-label="Session details">
   <div class="drawer-head" id="drawer-head"></div>
   <div class="drawer-summary" id="drawer-summary"></div>
-  <div class="drawer-stats" id="drawer-stats"></div>
   <div class="stream-tools">
-    <button class="filter on" data-filter="thinking" title="Toggle thinking (t)">thinking</button>
-    <button class="filter on" data-filter="tools" title="Toggle tools (u)">tools</button>
-    <button class="filter on" data-filter="text" title="Toggle replies (r)">replies</button>
+    <div class="seg" role="tablist">
+      <button class="seg-btn on" data-mode="story" role="tab" title="Prompts, replies, and the work in between as one line per step">Story</button>
+      <button class="seg-btn" data-mode="raw" role="tab" title="Every transcript entry (r)">Raw</button>
+    </div>
+    <button class="filter" id="thinking-toggle" title="Show Claude's thinking (t)">thinking</button>
     <label class="toggle follow" title="Follow the newest entries (f)"><input type="checkbox" id="follow" checked> follow</label>
   </div>
   <div class="stream" id="stream"><button class="link" id="load-earlier" hidden>Load earlier</button><div id="stream-list"></div></div>
@@ -62,7 +64,7 @@
   </label>
   <p class="hint">Written by Haiku through your own claude login, about a fifth of a cent each.</p>
   <div id="hooks-row"></div>
-  <p class="hint">Keys: <kbd>n</kbd> next that needs you · <kbd>f</kbd> fit · <kbd>Esc</kbd> close · <kbd>t</kbd> <kbd>u</kbd> <kbd>r</kbd> filters</p>
+  <p class="hint">Keys: <kbd>n</kbd> next that needs you · <kbd>f</kbd> fit · <kbd>Esc</kbd> close · <kbd>r</kbd> raw · <kbd>t</kbd> thinking</p>
 </div>
 
 <div class="toasts" id="toasts"></div>

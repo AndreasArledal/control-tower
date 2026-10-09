@@ -27,6 +27,12 @@ test('PermissionRequest raises attention with the tool name', () => {
   assert.match(s.attention.message, /Bash/);
 });
 
+test('a PermissionRequest for AskUserQuestion is a question, not a permission', () => {
+  const s = applyHookEvent(emptyHookState(), ev({ hook_event_name: 'PermissionRequest', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which DB?' }] } }));
+  assert.equal(s.attention.kind, 'question');
+  assert.equal(s.attention.message, 'Which DB?');
+});
+
 test('Stop records doneAt and the last message; AskUserQuestion pre/post toggles question attention', () => {
   let s = applyHookEvent(emptyHookState(), ev({ hook_event_name: 'Stop', last_assistant_message: 'All done.' }));
   assert.equal(s.doneAt, at);

@@ -239,7 +239,9 @@ export class RadarStore extends EventEmitter {
   _sessionView(s) {
     const now = this._now();
     const m = s.model;
-    const attention = s.hooks.attention && s.alive ? s.hooks.attention : null;
+    let attention = s.hooks.attention && s.alive ? s.hooks.attention : null;
+    // a notification without a tool name can arrive while the transcript already shows the pending question
+    if (attention?.kind === 'permission' && m.pendingQuestion) attention = { ...attention, kind: 'question', message: m.pendingQuestion.text };
     const doneAt = s.hooks.doneAt ?? s.flipDoneAt;
     const r = resolveState({ alive: s.alive, busy: s.busy, doneAt, lastPromptAt: Math.max(m.lastPromptAt ?? 0, s.hooks.lastPromptAt ?? 0) || null, attention, pendingQuestion: m.pendingQuestion, lastActivityAt: m.lastActivityAt, now });
     const agents = [...s.agents.values()].map((a) => this._agentView(s, a)).sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));

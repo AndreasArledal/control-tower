@@ -8,6 +8,14 @@ test('wezterm: finds the pane whose tty matches and focuses it, then raises the 
   assert.deepEqual(plan.map((c) => c.join(' ')), ['wezterm cli activate-pane --pane-id 9', 'open -a WezTerm']);
 });
 
+test('wezterm: a pane in another workspace is focused but the plan carries a note', () => {
+  const panes = parseWezTermList(JSON.stringify([{ pane_id: 9, tty_name: '/dev/ttys001', window_id: 4, workspace: 'Worky' }]));
+  const plan = planFocus({ terminal: 'wezterm', tty: 'ttys001', panes, platform: 'darwin', activeWorkspace: 'Dotfiles' });
+  assert.equal(plan[0].join(' '), 'wezterm cli activate-pane --pane-id 9');
+  assert.match(plan.note, /Worky/);
+  assert.equal(planFocus({ terminal: 'wezterm', tty: 'ttys001', panes, platform: 'darwin', activeWorkspace: 'Worky' }).note, undefined);
+});
+
 test('iterm and terminal.app: AppleScript selects the session by tty', () => {
   const it = planFocus({ terminal: 'iterm', tty: 'ttys003', platform: 'darwin' });
   assert.equal(it[0][0], 'osascript');

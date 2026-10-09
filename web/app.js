@@ -30,15 +30,13 @@ function connect() {
 function setConnected(on) {
   $('live-dot').className = 'live-dot ' + (on ? 'on' : 'off');
   $('live-dot').title = on ? 'Live' : 'Reconnecting…';
-  if (!on) $('brand-sub').textContent = 'reconnecting…';
+  if (!on) $('status').innerHTML = '<span class="st idle">reconnecting…</span>';
 }
 
 function onSnapshot(snap) {
   state.snap = snap;
   for (const v of snap.sessions) { const byId = new Map(v.agents.map((a) => [a.id, 0])); for (const a of v.agents) if (a.parentAgentId && byId.has(a.parentAgentId)) byId.set(a.parentAgentId, byId.get(a.parentAgentId) + 1); for (const a of v.agents) a.children = byId.get(a.id) ?? 0; }
-  const live = snap.sessions.filter((s) => s.alive).length;
-  const agents = snap.sessions.reduce((n, s) => n + s.runningAgents, 0);
-  $('brand-sub').textContent = `${live} live${agents ? ` · ${agents} agent${agents === 1 ? '' : 's'} running` : ''}`;
+  renderStatus(snap);
   document.title = (snap.attention.length ? `(${snap.attention.length}) ` : '') + 'Claude Radar';
   $('summaries-mode').value = snap.summaries.mode;
   renderBadge(snap); renderHooksRow(snap); detectTransitions(snap);
@@ -63,7 +61,20 @@ function detectTransitions(snap) {
   }
 }
 
-/* ---------- top bar: attention badge, settings ---------- */
+/* ---------- top bar: status line, attention badge, settings ---------- */
+function renderStatus(snap) {
+  const live = snap.sessions.filter((s) => s.alive);
+  const n = (st) => live.filter((s) => s.state === st).length;
+  const agents = live.reduce((k, s) => k + s.runningAgents, 0);
+  const parts = [];
+  const waiting = n('question') + n('permission');
+  if (n('working')) parts.push(`<span class="st working"><i></i>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
+  if (waiting) parts.push(`<span class="st blocking"><i></i>${waiting} waiting for you</span>`);
+  if (n('done')) parts.push(`<span class="st done"><i></i>${n('done')} finished</span>`);
+  if (n('idle')) parts.push(`<span class="st idle"><i></i>${n('idle')} idle</span>`);
+  $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
+}
+
 function renderBadge(snap) {
   const n = snap.attention.length, b = $('attention-badge');
   $('attention-count').textContent = n;
@@ -244,39 +255,43 @@ function renderDrawer() {
 }
 
 function iconBtn(act, icon, title) { return `<button class="icon-btn" data-act="${act}" title="${esc(title)}" aria-label="${esc(title)}">${ICON[icon]}</button>`; }
+function actBtn(act, icon, label, title = label) { return `<button class="act" data-act="${act}" title="${esc(title)}">${ICON[icon]}<span>${esc(label)}</span></button>`; }
 
 function renderSessionHead(v, now) {
   const resume = `cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`;
   const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
+  const stats = [`${tokens(v.contextTokens)} context`, `${v.turns} turn${v.turns === 1 ? '' : 's'}`, `${v.toolCalls} tool call${v.toolCalls === 1 ? '' : 's'}`, v.agents.length ? `${v.agents.length} agent${v.agents.length === 1 ? '' : 's'}` : null, v.errors ? `${v.errors} error${v.errors === 1 ? '' : 's'}` : null, shortModelName(v.model) || null, v.startedAt ? duration(now - v.startedAt) : null].filter(Boolean);
   $('drawer-head').innerHTML = `
-    <div class="row"><h2>${esc(v.title)}</h2><div class="acts">
-      ${v.alive ? iconBtn('focus', 'terminal', 'Jump to terminal') : ''}
-      ${iconBtn('copy', 'copy', 'Copy resume command')}
-      ${iconBtn('history', 'history', 'Recent sessions in this project')}
-      ${state.snap.summaries.mode !== 'off' ? iconBtn('summarize', 'summary', v.summarizing ? 'Summarizing…' : 'Write a summary now') : ''}
-      ${iconBtn('close', 'close', 'Close (Esc)')}
-    </div></div>
-    <div class="meta"><span class="pill ${v.state}">${esc(stateLabel(v.state))}${v.stateSince ? ' · ' + ago(v.stateSince, now) : ''}</span><span>${esc(v.name || v.id.slice(0, 8))}</span>${v.pid ? `<span>pid ${v.pid}</span>` : ''}<code title="${esc(v.cwd)}">${esc(shortPath(v.cwd, 40))}</code></div>
-    ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : v.state === 'working' ? `<div class="muted" style="margin-top:6px">${esc(plain(activityLine(v)))}</div>` : ''}`;
+    <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
+    <div class="meta"><span class="pill ${v.state}">${esc(stateLabel(v.state))}${v.stateSince ? ' · ' + ago(v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
+    ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : v.state === 'working' ? `<div class="now">${esc(plain(activityLine(v)))}</div>` : ''}
+    <div class="acts">
+      ${v.alive ? actBtn('focus', 'terminal', 'Terminal', 'Jump to the terminal pane running this session') : ''}
+      ${actBtn('copy', 'copy', 'Resume', 'Copy: cd … && claude --resume …')}
+      ${actBtn('history', 'history', 'Recent', 'Recent sessions in this project')}
+      ${state.snap.summaries.mode !== 'off' ? actBtn('summarize', 'summary', v.summarizing ? 'Summarizing…' : 'Summarize', 'Write a fresh summary now') : ''}
+    </div>
+    <div class="stats">${stats.map((x) => `<span>${esc(x)}</span>`).join('')}</div>`;
   const s = v.summary;
-  const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary';
-  sumEl.innerHTML = s ? `<b>${esc(s.headline)}</b> ${esc(s.progress)}${s.needs ? ` <span class="needs">${esc(s.needs)}</span>` : ''}`
-    : state.snap.summaries.mode === 'off' ? `Summaries are off (settings).`
-    : v.summaryError ? `Summary failed: ${esc(v.summaryError)}` : v.summarizing ? 'Writing a summary…' : (v.lastPrompt ? 'Latest request: ' + esc(clip(plain(v.lastPrompt), 200)) : 'No prompt yet.');
-  sumEl.title = s ? `${s.headline}\n${s.progress}\n${s.needs}` : '';
-  $('drawer-stats').innerHTML = [`<b>${tokens(v.contextTokens)}</b> context`, `<b>${v.turns}</b> turns`, `<b>${v.toolCalls}</b> tools`, v.agents.length ? `<b>${v.agents.length}</b> agents` : null, v.errors ? `<b>${v.errors}</b> errors` : null, esc(shortModelName(v.model) || ''), v.startedAt ? duration(now - v.startedAt) : null].filter(Boolean).join(' · ');
+  const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
+  sumEl.innerHTML = s ? `<div class="headline">${esc(s.headline)}</div>${s.progress ? `<div class="progress">${esc(s.progress)}</div>` : ''}${s.needs ? `<div class="needs">${esc(s.needs)}</div>` : ''}<div class="when">summary · ${ago(s.at, now)} ago</div>`
+    : state.snap.summaries.mode === 'off' ? `<div class="progress">Summaries are off. Turn them on in settings to get a few lines on where this session stands.</div>`
+    : v.summaryError ? `<div class="progress">Summary failed: ${esc(v.summaryError)}</div>` : v.summarizing ? '<div class="progress">Writing a summary…</div>'
+    : (v.lastPrompt ? `<div class="progress"><span class="muted">Latest request</span> ${esc(clip(plain(v.lastPrompt), 240))}</div>` : '<div class="progress">No prompt yet.</div>');
   wireActs(v);
 }
 
 function renderAgentHead(v, a, now) {
   const line = a.state === 'running' ? plain(activityLine({ state: 'working', activity: a.activity })) : a.state === 'done' ? `Finished${a.endedAt ? ' ' + ago(a.endedAt, now) + ' ago' : ''}${a.startedAt && a.endedAt && a.endedAt > a.startedAt ? ' after ' + duration(a.endedAt - a.startedAt) : ''}` : 'Ended with its session';
+  const stats = [`${tokens(a.contextTokens)} context`, `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`, shortModelName(a.model) || 'inherited model', a.startedAt ? duration((a.endedAt ?? now) - a.startedAt) : null].filter(Boolean);
   $('drawer-head').innerHTML = `
-    <div class="row"><h2>${esc(a.description || a.type)}</h2><div class="acts">${iconBtn('up', 'up', 'Back to session')}${a.parentAgentId ? iconBtn('parent', 'up', 'Parent agent') : ''}${iconBtn('close', 'close', 'Close (Esc)')}</div></div>
-    <div class="meta"><span class="pill ${a.state}">${esc(stateLabel(a.state))}</span><span>${esc(String(a.type))}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''}</span><span>in ${esc(v.name || v.title)}</span></div>
-    <div class="muted" style="margin-top:6px">${esc(line)}</div>`;
-  const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary';
-  sumEl.innerHTML = a.lastText ? esc(plain(a.lastText)) : 'No reply from this agent yet.'; sumEl.title = a.lastText ?? '';
-  $('drawer-stats').innerHTML = [`<b>${tokens(a.contextTokens)}</b> context`, `<b>${a.toolCalls}</b> tools`, esc(shortModelName(a.model) || 'inherited model'), a.startedAt ? duration((a.endedAt ?? now) - a.startedAt) : null].filter(Boolean).join(' · ');
+    <div class="row"><h2 title="${esc(a.description || a.type)}">${esc(a.description || a.type)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
+    <div class="meta"><span class="pill ${a.state}">${esc(stateLabel(a.state))}</span><span class="where">${esc(String(a.type).split(':').pop())}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''} · in ${esc(v.name || v.title)}</span></div>
+    <div class="now">${esc(line)}</div>
+    <div class="acts">${actBtn('up', 'up', 'Session', 'Back to the session')}${a.parentAgentId ? actBtn('parent', 'up', 'Parent agent') : ''}</div>
+    <div class="stats">${stats.map((x) => `<span>${esc(x)}</span>`).join('')}</div>`;
+  const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
+  sumEl.innerHTML = a.lastText ? `<div class="progress">${esc(clip(plain(a.lastText), 400))}</div>` : '<div class="progress">No reply from this agent yet.</div>';
   wireActs(v, a);
 }
 
@@ -287,18 +302,24 @@ function wireActs(v, a = null) {
   on('up', () => open(v.id, null));
   on('parent', () => open(v.id, a.parentAgentId));
   on('summarize', () => post(`/api/session/${encodeURIComponent(v.id)}/summarize`));
-  on('copy', (e) => { navigator.clipboard?.writeText(`cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`); flashTitle(e.currentTarget, 'Copied'); });
+  on('copy', (e) => { navigator.clipboard?.writeText(`cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`); note(e.currentTarget, 'Copied'); });
   on('history', () => showHistory(v.cwd));
-  on('focus', async (e) => { const r = await post(`/api/session/${encodeURIComponent(v.id)}/focus`); flashTitle(e.currentTarget, r?.ok ? 'Focused' : (r?.reason || 'Could not focus')); });
+  on('focus', async (e) => { const btn = e.currentTarget; const r = await post(`/api/session/${encodeURIComponent(v.id)}/focus`); note(btn, r?.ok ? (r.note || 'Focused') : (r?.reason || 'Could not focus the terminal')); });
 }
 
-function flashTitle(btn, text) { const old = btn.title; btn.title = text; btn.style.color = 'var(--text)'; setTimeout(() => { btn.title = old; btn.style.color = ''; }, 1800); }
+/** Short inline feedback under the action row. */
+function note(btn, text) {
+  const acts = btn.closest('.acts'); let el = acts.nextElementSibling;
+  if (!el?.classList.contains('act-note')) { el = document.createElement('div'); el.className = 'act-note'; acts.after(el); }
+  el.textContent = text; el.hidden = false;
+  clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 4000);
+}
 
 async function showHistory(cwd) {
   const list = await api(`/api/history?cwd=${encodeURIComponent(cwd)}`);
   const now = Date.now(), el = $('drawer-summary');
   el.className = 'drawer-summary history';
-  el.innerHTML = `<b>Recent sessions in ${esc(cwd.split('/').pop())}</b><ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><div>${esc(h.title || h.id.slice(0, 8))}${h.live ? ' <span class="pill working">live</span>' : ''}</div><div class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${Math.round(h.size / 1024)} KB</div></button></li>`).join('')}</ul>`;
+  el.innerHTML = `<div class="headline">Recent sessions in ${esc(cwd.split('/').pop())}</div><ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><div>${esc(h.title || h.id.slice(0, 8))}${h.live ? ' <span class="pill working">live</span>' : ''}</div><div class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${Math.round(h.size / 1024)} KB</div></button></li>`).join('')}</ul>`;
   el.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', async () => {
     const id = b.dataset.open;
     await post('/api/history/open', { cwd, id });
@@ -325,11 +346,15 @@ function toast(v) {
 function dismissToast(id) { const el = state.toasts.get(id); if (el) { el.remove(); state.toasts.delete(id); } }
 
 /* ---------- wiring ---------- */
-function setFilter(name, on) {
-  const btn = document.querySelector(`.filter[data-filter="${name}"]`);
-  const next = on ?? !btn.classList.contains('on');
-  btn.classList.toggle('on', next);
-  $('stream').classList.toggle('hide-' + name, !next);
+function setMode(mode) {
+  document.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+  $('thinking-toggle').hidden = mode === 'raw';
+  stream.setMode(mode);
+}
+function toggleThinking() {
+  const on = !$('thinking-toggle').classList.contains('on');
+  $('thinking-toggle').classList.toggle('on', on);
+  stream.setThinking(on);
 }
 
 function togglePop(id) {
@@ -358,7 +383,8 @@ function setupUI() {
   $('attention-pop').addEventListener('click', (e) => { const b = e.target.closest('[data-focus]'); if (b) { focusSession(b.dataset.focus); $('attention-pop').hidden = true; } });
   document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.popover, #attention-badge, #settings-btn')) { $('attention-pop').hidden = true; $('settings-pop').hidden = true; } });
   $('summaries-mode').onchange = (e) => post('/api/settings', { summaries: e.target.value });
-  document.querySelectorAll('.filter').forEach((b) => b.addEventListener('click', () => setFilter(b.dataset.filter)));
+  document.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  $('thinking-toggle').addEventListener('click', toggleThinking);
   $('follow').addEventListener('change', (e) => stream.setFollow(e.target.checked));
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -369,9 +395,8 @@ function setupUI() {
       case 'n': { const ids = state.snap?.attention.map((a) => a.sessionId) ?? []; if (!ids.length) break; const i = ids.indexOf(state.selected?.sessionId); focusSession(ids[(i + 1) % ids.length]); break; }
       case '+': case '=': $('zoom-in').click(); break;
       case '-': $('zoom-out').click(); break;
-      case 't': if (openDrawer) setFilter('thinking'); break;
-      case 'u': if (openDrawer) setFilter('tools'); break;
-      case 'r': if (openDrawer) setFilter('text'); break;
+      case 't': if (openDrawer) toggleThinking(); break;
+      case 'r': if (openDrawer) setMode(stream.mode === 'raw' ? 'story' : 'raw'); break;
       default: return;
     }
     e.preventDefault();

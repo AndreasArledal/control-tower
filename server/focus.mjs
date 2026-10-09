@@ -7,14 +7,18 @@ const APP_NAMES = { wezterm: 'WezTerm', iterm: 'iTerm', terminal: 'Terminal', ki
 const shq = (s) => String(s).replace(/([^A-Za-z0-9_\/:=.,~-])/g, '\\$1');
 
 export function parseWezTermList(json) {
-  try { return JSON.parse(json).map((p) => ({ paneId: p.pane_id, tty: String(p.tty_name ?? '').replace(/^\/dev\//, ''), windowId: p.window_id })); } catch { return []; }
+  try { return JSON.parse(json).map((p) => ({ paneId: p.pane_id, tty: String(p.tty_name ?? '').replace(/^\/dev\//, ''), windowId: p.window_id, workspace: p.workspace ?? null })); } catch { return []; }
+}
+
+export function parseWezTermClients(json) {
+  try { return JSON.parse(json)[0]?.workspace ?? null; } catch { return null; }
 }
 
 /**
  * Pure planner: given what we know (terminal app, the process's tty, pane listings), return the
  * commands to run in order. Keeping this pure makes the per-terminal logic testable.
  */
-export function planFocus({ terminal, tty, pid, cwd, panes = [], tmuxPanes = '', custom = null, platform = process.platform }) {
+export function planFocus({ terminal, tty, pid, cwd, panes = [], tmuxPanes = '', custom = null, platform = process.platform, activeWorkspace = null }) {
   if (custom) {
     const cmd = custom.replace(/\{(tty|pid|cwd|sessionId)\}/g, (_, k) => shq({ tty, pid, cwd }[k] ?? ''));
     return [['sh', '-c', cmd]];
@@ -24,7 +28,11 @@ export function planFocus({ terminal, tty, pid, cwd, panes = [], tmuxPanes = '',
   switch (terminal) {
     case 'wezterm': {
       const pane = panes.find((p) => p.tty === tty);
-      return pane ? [['wezterm', 'cli', 'activate-pane', '--pane-id', String(pane.paneId)], ...raise] : raise;
+      if (!pane) return raise;
+      const plan = [['wezterm', 'cli', 'activate-pane', '--pane-id', String(pane.paneId)], ...raise];
+      // the CLI cannot switch workspaces; say so instead of pretending
+      if (pane.workspace && activeWorkspace && pane.workspace !== activeWorkspace) plan.note = `It lives in WezTerm workspace “${pane.workspace}”; switch there to see it.`;
+      return plan;
     }
     case 'tmux': {
       const line = tmuxPanes.split('\n').map((l) => l.trim().split(/\s+/)).find(([t]) => t === tty || t === '/dev/' + tty);
@@ -101,13 +109,16 @@ export async function focusProcess({ pid, cwd, custom = null }) {
   if (!pid) return { ok: false, reason: 'no process id for this session' };
   const tty = await ttyOf(pid);
   const terminal = custom ? null : await detectTerminal(pid);
-  let panes = [], tmuxPanes = '';
-  if (terminal === 'wezterm') { try { panes = parseWezTermList((await run('wezterm', ['cli', 'list', '--format', 'json'])).stdout); } catch { /* cli unavailable */ } }
+  let panes = [], tmuxPanes = '', activeWorkspace = null;
+  if (terminal === 'wezterm') {
+    try { panes = parseWezTermList((await run('wezterm', ['cli', 'list', '--format', 'json'])).stdout); } catch { /* cli unavailable */ }
+    try { activeWorkspace = parseWezTermClients((await run('wezterm', ['cli', 'list-clients', '--format', 'json'])).stdout); } catch { /* ignore */ }
+  }
   if (terminal === 'tmux') { try { tmuxPanes = (await run('tmux', ['list-panes', '-a', '-F', '#{pane_tty} #{session_name}:#{window_index}.#{pane_index}'])).stdout; } catch { /* no server */ } }
-  const plan = planFocus({ terminal, tty, pid, cwd, panes, tmuxPanes, custom });
+  const plan = planFocus({ terminal, tty, pid, cwd, panes, tmuxPanes, custom, activeWorkspace });
   if (!plan.length) return { ok: false, reason: terminal ? `no way to focus a ${terminal} pane` : 'could not tell which terminal runs this session', tty, terminal };
   for (const [cmd, ...args] of plan) {
     try { await run(cmd, args, { timeout: 5000 }); } catch (err) { return { ok: false, reason: `${cmd} failed: ${String(err.stderr || err.message).trim().slice(0, 200)}`, tty, terminal }; }
   }
-  return { ok: true, via: custom ? 'custom command' : terminal, tty };
+  return { ok: true, via: custom ? 'custom command' : terminal, tty, note: plan.note ?? null };
 }
