@@ -62,7 +62,7 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .brand { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
 .brand .mark-dot { fill: var(--text-3); transition: fill .12s; }
 .brand.live-on .mark-dot { fill: var(--ready); } .brand.live-off .mark-dot { fill: var(--error); }
-.brand-name { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--text); }
+.brand-name { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
 .status { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; font-weight: 500; color: var(--text-2); }
 .status .sep { color: var(--text-3); }
 .status .st { display: inline-flex; align-items: center; gap: 8px; }

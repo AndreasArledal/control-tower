@@ -23,9 +23,15 @@ function png(size, alphaAt) {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4); ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
-// a radar: two rings and a centre dot
+// a radar: ring, quarter sweep, radius line and a blip
 const ring = (d, r, w) => Math.max(0, Math.min(1, 1 - (Math.abs(d - r) - w / 2) * 2));
-const alphaAt = (x, y, s) => { const u = s / 18, d = Math.hypot(x - s / 2, y - s / 2) / u; return Math.max(ring(d, 7.2, 1.6), ring(d, 4, 1.4) * 0.75, d < 1.4 ? 1 : 0); };
+const alphaAt = (x, y, s) => {
+  const u = s / 18, dx = (x - s / 2) / u, dy = (y - s / 2) / u, d = Math.hypot(dx, dy);
+  const sweep = dx >= 0 && dy <= 0 && d < 7.4 ? 0.3 : 0; // top-right quadrant
+  const line = Math.abs(dx) < 0.8 && dy <= 0 && d < 7.4 ? 1 : 0;
+  const blip = Math.hypot(dx - 3.6, dy + 3.6) < 1.6 ? 1 : 0;
+  return Math.max(ring(d, 7.4, 1.7), sweep, line, blip, d < 1.1 ? 1 : 0);
+};
 writeFileSync(new URL('./iconTemplate.png', import.meta.url), png(18, alphaAt));
 writeFileSync(new URL('./iconTemplate@2x.png', import.meta.url), png(36, alphaAt));
 console.log('icons written');
