@@ -52,7 +52,7 @@ test('store builds projects, sessions, agents and reacts to hook events', async 
   assert.deepEqual([s.agents[0].id, s.agents[0].description, s.agents[0].state, s.agents[0].parentAgentId, s.agents[0].activity.tool], ['abc', 'Scout the repo', 'running', null, 'Read']);
 
   // Stop hook arrives via spool dir
-  const spool = join(home, 'claude-radar', 'events');
+  const spool = join(home, 'control-tower', 'events');
   mkdirSync(spool, { recursive: true });
   writeFileSync(join(spool, 'ev1.json'), JSON.stringify({ hook_event_name: 'Stop', session_id: sid, cwd: '/p/a', transcript_path: transcript, last_assistant_message: 'All built.' }));
   writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: sid, cwd: '/p/a', name: 'a-1', status: 'idle', startedAt: 1 }));
@@ -117,7 +117,7 @@ test('hook events that pile up between ticks are applied in write order, not nam
   const store = new RadarStore({ home, summarizer: null });
   let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
   await store.tick();
-  const spool = join(home, 'claude-radar', 'events'); mkdirSync(spool, { recursive: true });
+  const spool = join(home, 'control-tower', 'events'); mkdirSync(spool, { recursive: true });
   // "a" sorts first by name but was written later: a prompt after the stop must win
   writeFileSync(join(spool, 'z-first.json'), JSON.stringify({ hook_event_name: 'Stop', session_id: sid, cwd: '/p/a', transcript_path: transcript, last_assistant_message: 'done' }));
   utimesSync(join(spool, 'z-first.json'), new Date(clock - 2000), new Date(clock - 2000));

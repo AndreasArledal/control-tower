@@ -12,7 +12,7 @@ test('install and uninstall round-trip settings.json and keep a backup', async (
   assert.equal((await ctl.status()).installed, false);
   await ctl.install();
   assert.equal((await ctl.status()).installed, true);
-  assert.ok(existsSync(join(home, 'claude-radar', 'hook.sh')));
+  assert.ok(existsSync(join(home, 'control-tower', 'hook.sh')));
   assert.ok(existsSync(join(home, 'settings.json.radar-backup')));
   const after = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8'));
   assert.equal(after.hooks.Stop[0].hooks[0].command, 'echo hi');

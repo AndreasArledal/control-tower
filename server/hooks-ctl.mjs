@@ -17,7 +17,7 @@ async function backup(settingsPath) {
   try { await copyFile(settingsPath, settingsPath + '.radar-backup'); } catch { /* no settings yet */ }
 }
 
-/** Installs the spool hook script under <home>/claude-radar and registers it in settings.json (backup kept). */
+/** Installs the spool hook script under <home>/control-tower and registers it in settings.json (backup kept). */
 export function makeHooksCtl(home) {
   const settingsPath = join(home, 'settings.json');
   const hookPath = join(radarDir(home), 'hook.sh');

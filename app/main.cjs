@@ -1,4 +1,4 @@
-// Claude Radar as a macOS menu bar app: the same server, embedded, plus a tray item that shows
+// Control Tower as a macOS menu bar app: the same server, embedded, plus a tray item that shows
 // how many sessions need you and opens the dashboard in a window.
 const { app, Tray, Menu, BrowserWindow, nativeImage, shell } = require('electron');
 const http = require('node:http');
@@ -14,7 +14,7 @@ const post = (p, body) => new Promise((resolve) => { const req = http.request(BA
 async function ensureServer() {
   if (await get('/api/health')) return 'already running';
   const { startRadar } = await import('../server/start.mjs');
-  radar = await startRadar({ port: PORT, onError: (e) => console.error('[radar]', e.message) });
+  radar = await startRadar({ port: PORT, onError: (e) => console.error('[tower]', e.message) });
   return 'embedded';
 }
 
@@ -41,12 +41,12 @@ function onSnapshot(s) {
   const working = s.sessions.filter((v) => v.state === 'working').length;
   const agents = s.sessions.reduce((n, v) => n + v.runningAgents, 0);
   tray.setTitle(needs ? ` ${needs} need${needs === 1 ? 's' : ''} you` : working ? ` ${working}${agents ? `+${agents}` : ''}` : '');
-  tray.setToolTip(`Claude Radar — ${s.sessions.filter((v) => v.alive).length} live sessions, ${needs} waiting for you`);
+  tray.setToolTip(`Control Tower — ${s.sessions.filter((v) => v.alive).length} live sessions, ${needs} waiting for you`);
   tray.setContextMenu(buildMenu());
 }
 
 function buildMenu() {
-  const items = [{ label: 'Open Radar', click: () => showWindow() }, { type: 'separator' }];
+  const items = [{ label: 'Open Control Tower', click: () => showWindow() }, { type: 'separator' }];
   if (snap?.attention.length) {
     for (const a of snap.attention) items.push({ label: `${a.seen ? '   ' : '●  '}${a.state === 'done' ? '✓' : '?'}  ${a.projectName}: ${a.title.slice(0, 60)}`, click: () => { post(`/api/session/${encodeURIComponent(a.sessionId)}/seen`); showWindow(`#session=${encodeURIComponent(a.sessionId)}`); } });
     items.push({ type: 'separator' });
@@ -56,13 +56,13 @@ function buildMenu() {
   }
   const mode = snap?.summaries.mode ?? 'auto';
   items.push({ label: 'Summaries', submenu: ['auto', 'manual', 'off'].map((m) => ({ label: { auto: 'Automatic', manual: 'On request', off: 'Off' }[m], type: 'radio', checked: mode === m, click: () => post('/api/settings', { summaries: m }) })) });
-  items.push({ label: 'Open in browser', click: () => shell.openExternal(BASE) }, { type: 'separator' }, { label: 'Quit Radar', role: 'quit' });
+  items.push({ label: 'Open in browser', click: () => shell.openExternal(BASE) }, { type: 'separator' }, { label: 'Quit Control Tower', role: 'quit' });
   return Menu.buildFromTemplate(items);
 }
 
 function showWindow(hash = '') {
   if (!win) {
-    win = new BrowserWindow({ width: 1360, height: 900, show: false, title: 'Claude Radar', backgroundColor: '#161B26', webPreferences: { contextIsolation: true, sandbox: true } });
+    win = new BrowserWindow({ width: 1360, height: 900, show: false, title: 'Control Tower', backgroundColor: '#161B26', webPreferences: { contextIsolation: true, sandbox: true } });
     win.on('close', (e) => { if (!app.isQuitting) { e.preventDefault(); win.hide(); } });
     win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   }
@@ -75,11 +75,11 @@ app.whenReady().then(async () => {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'iconTemplate.png'));
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip('Claude Radar');
+  tray.setToolTip('Control Tower');
   tray.setContextMenu(buildMenu());
   tray.on('click', () => { if (win?.isVisible()) win.hide(); else showWindow(); });
   const how = await ensureServer();
-  console.log(`claude-radar menu bar: server ${how} at ${BASE}`);
+  console.log(`control-tower menu bar: server ${how} at ${BASE}`);
   subscribe();
   if (process.env.RADAR_SMOKE) setTimeout(() => app.quit(), Number(process.env.RADAR_SMOKE));
 });

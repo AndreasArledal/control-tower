@@ -1,11 +1,11 @@
 {
-  "name": "claude-radar",
+  "name": "control-tower",
   "version": "0.1.0",
-  "description": "Local mission control for your Claude Code sessions: see every session and agent, what it is thinking, and when it needs you.",
+  "description": "Air traffic control for your Claude Code sessions: every session and agent, what it is doing, and who needs you.",
   "type": "module",
-  "bin": { "claude-radar": "bin/claude-radar.mjs" },
+  "bin": { "control-tower": "bin/control-tower.mjs" },
   "scripts": {
-    "start": "node bin/claude-radar.mjs",
+    "start": "node bin/control-tower.mjs",
     "test": "node --test"
   },
   "engines": { "node": ">=20" },

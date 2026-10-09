@@ -40,7 +40,7 @@ function setConnected(on) {
 function onSnapshot(snap) {
   state.snap = snap;
   for (const v of snap.sessions) { const byId = new Map(v.agents.map((a) => [a.id, 0])); for (const a of v.agents) if (a.parentAgentId && byId.has(a.parentAgentId)) byId.set(a.parentAgentId, byId.get(a.parentAgentId) + 1); for (const a of v.agents) a.children = byId.get(a.id) ?? 0; }
-  document.title = (snap.unseen ? `(${snap.unseen}) ` : '') + 'Claude Radar';
+  document.title = (snap.unseen ? `(${snap.unseen}) ` : '') + 'Control Tower';
   $('summaries-mode').value = snap.summaries.mode;
   $('summaries-refresh').value = String(snap.summaries.refreshMinutes ?? 4);
   const sp = snap.summaries.spend;
@@ -149,7 +149,7 @@ function renderGraph() {
   const empty = $('empty');
   if (!snap.sessions.some((s) => s.alive || s.pinned)) {
     empty.hidden = false;
-    empty.innerHTML = `<div><h2>No Claude Code session is running</h2><p>Start one with <code>claude</code> in any project and it appears here within a second.</p><p class="faint">Radar watches ~/.claude for you. Nothing leaves this machine.</p></div>`;
+    empty.innerHTML = `<div><h2>No Claude Code session is running</h2><p>Start one with <code>claude</code> in any project and it appears here within a second.</p><p class="faint">Control Tower watches ~/.claude for you. Nothing leaves this machine.</p></div>`;
   } else if (!scene.nodes.length) {
     empty.hidden = false;
     empty.innerHTML = `<div><h2>Nothing running in this project</h2><p>Pick another project above, or turn on “ended”.</p></div>`;
@@ -340,7 +340,7 @@ function wireActs(v, a = null) {
   on('more-done', () => { state.doneAll = true; renderDrawer(); });
   on('copy', (e) => { navigator.clipboard?.writeText(`cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`); note(e.currentTarget, 'Copied'); });
   on('history', () => showHistory(v));
-  on('transcript', () => { state.transcriptOpen = !state.transcriptOpen; try { localStorage.setItem('radar.transcript', state.transcriptOpen ? '1' : '0'); } catch { /* optional */ } applyTranscript(); renderDrawer(); });
+  on('transcript', () => { state.transcriptOpen = !state.transcriptOpen; try { localStorage.setItem('tower.transcript', state.transcriptOpen ? '1' : '0'); } catch { /* optional */ } applyTranscript(); renderDrawer(); });
   $('drawer-summary').querySelectorAll('[data-agent]').forEach((b) => b.addEventListener('click', () => open(v.id, b.dataset.agent)));
 }
 function note(btn, text) { const label = btn.querySelector('span'); const old = label.textContent; label.textContent = text; clearTimeout(btn._t); btn._t = setTimeout(() => { label.textContent = old; }, 2000); }
@@ -414,7 +414,7 @@ function pickProject(id, additive) {
     if (state.selectedProjects.has(id)) state.selectedProjects.delete(id); else state.selectedProjects.add(id);
     if (!state.selectedProjects.size) state.mode = 'active';
   } else { state.mode = 'pick'; state.selectedProjects = new Set([id]); for (const a of state.snap.attention) if (state.snap.sessions.find((v) => v.id === a.sessionId)?.cwd === id) markSeen(a.sessionId); }
-  try { localStorage.setItem('radar.mode', state.mode); } catch { /* optional */ }
+  try { localStorage.setItem('tower.mode', state.mode); } catch { /* optional */ }
   renderRail(state.snap); renderGraph(); fitView();
 }
 function toggleExited() { state.showExited = !state.showExited; renderRail(state.snap); renderGraph(); fitView(); }
@@ -462,12 +462,12 @@ function setupUI() {
 function applyTheme(mode) {
   if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode; else delete document.documentElement.dataset.theme;
   $('theme-mode').value = mode;
-  try { localStorage.setItem('radar.theme', mode); } catch { /* optional */ }
+  try { localStorage.setItem('tower.theme', mode); } catch { /* optional */ }
 }
-try { applyTheme(localStorage.getItem('radar.theme') || 'auto'); } catch { applyTheme('auto'); }
+try { applyTheme(localStorage.getItem('tower.theme') || 'auto'); } catch { applyTheme('auto'); }
 
 setInterval(() => { if (state.snap && !$('attention-pop').hidden) renderAttentionPop(); }, 5000);
-try { const m = localStorage.getItem('radar.mode'); if (m === 'all' || m === 'active') state.mode = m; state.transcriptOpen = localStorage.getItem('radar.transcript') === '1'; } catch { /* optional */ }
+try { const m = localStorage.getItem('tower.mode'); if (m === 'all' || m === 'active') state.mode = m; state.transcriptOpen = localStorage.getItem('tower.transcript') === '1'; } catch { /* optional */ }
 applyTranscript();
 setupCanvas(); setupUI(); connect();
 let fitted = false;

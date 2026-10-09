@@ -9,7 +9,7 @@ import { claudeHome, radarDir } from './paths.mjs';
 export const WEB_DIR = fileURLToPath(new URL('../web/', import.meta.url)).replace(/\/$/, '');
 
 /** Boot the whole thing in-process: store, summarizer, HTTP server. Used by the CLI and the menu bar app. */
-export async function startRadar({ port = 4747, host = '127.0.0.1', summaries = null, model = 'haiku', home = claudeHome(), onError = (e) => console.error('[radar]', e.message) } = {}) {
+export async function startRadar({ port = 4747, host = '127.0.0.1', summaries = null, model = 'haiku', home = claudeHome(), onError = (e) => console.error('[tower]', e.message) } = {}) {
   const hooksCtl = makeHooksCtl(home);
   const summarizer = new Summarizer({ cacheFile: join(radarDir(home), 'summaries.json'), runOptions: { model, cwd: join(radarDir(home), 'summarizer') } });
   await summarizer.load();

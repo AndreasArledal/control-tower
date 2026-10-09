@@ -1,11 +1,11 @@
-export const RADAR_MARKER = 'claude-radar';
+export const RADAR_MARKER = /control-tower|claude-radar/; // the old name still matches so an upgrade replaces old hooks
 
 /** Events radar subscribes to. Matchers restrict the chatty tool events to the one tool that matters. */
 export const RADAR_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'Stop', 'StopFailure', 'Notification', 'PermissionRequest', 'PreToolUse', 'PostToolUse', 'SubagentStart', 'SubagentStop'];
 const MATCHERS = { PreToolUse: 'AskUserQuestion', PostToolUse: 'AskUserQuestion' };
 
 function isRadarHook(h) {
-  return h?.type === 'command' && typeof h.command === 'string' && h.command.includes(RADAR_MARKER);
+  return h?.type === 'command' && typeof h.command === 'string' && RADAR_MARKER.test(h.command);
 }
 
 function stripRadar(hooks) {

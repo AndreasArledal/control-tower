@@ -1,11 +1,11 @@
-# Claude Radar
+# Control Tower
 
-Local mission control for [Claude Code](https://code.claude.com). One page that shows every Claude Code session on your machine, the agents each one has spawned, what each of them is doing and thinking right now, and which ones are waiting for you.
+Air traffic control for [Claude Code](https://code.claude.com). One page that shows every Claude Code session on your machine, the agents each one has spawned, what each of them is doing and thinking right now, and which ones are waiting for you.
 
-Nothing leaves your machine. Radar only reads the files Claude Code already writes under `~/.claude`.
+Nothing leaves your machine. Control Tower only reads the files Claude Code already writes under `~/.claude`.
 
 ```
-┌ ● Radar  4 live · 2 agents running                          ⬤2  ⚙ ┐
+┌ ▲ Control Tower  4 live · 2 agents running                          ⬤2  ⚙ ┐
 ├ [All] [● .claude 2] [● worky 1] [○ ai-enablement 1] [○ dotfiles 1] ┤
 │                                                                    │
 │  worky   Improving market strategy and package pricing             │
@@ -40,26 +40,26 @@ Nothing leaves your machine. Radar only reads the files Claude Code already writ
 ## Run it
 
 ```sh
-git clone <this repo> claude-radar
-cd claude-radar
-node bin/claude-radar.mjs            # opens http://localhost:4747
+git clone <this repo> control-tower
+cd control-tower
+node bin/control-tower.mjs            # opens http://localhost:4747
 ```
 
 Options: `--port 4747`, `--no-open`, `--no-summaries`, `--model haiku`.
 
 ### Hooks (recommended)
 
-Radar sees sessions, transcripts and agents without any setup. To learn the *exact* moment a session asks you something, waits for a permission, or finishes, let it register a few Claude Code hooks:
+Control Tower sees sessions, transcripts and agents without any setup. To learn the *exact* moment a session asks you something, waits for a permission, or finishes, let it register a few Claude Code hooks:
 
 ```sh
-node bin/claude-radar.mjs hooks install     # or click "Install hooks" in the page
-node bin/claude-radar.mjs hooks status
-node bin/claude-radar.mjs hooks uninstall
+node bin/control-tower.mjs hooks install     # or click "Install hooks" in the page
+node bin/control-tower.mjs hooks status
+node bin/control-tower.mjs hooks uninstall
 ```
 
-This adds command hooks to `~/.claude/settings.json` (a backup is written next to it) that run `~/.claude/claude-radar/hook.sh`, a four-line POSIX shell script that copies the hook's JSON into a spool directory. The hooks are async and always exit 0, so they can never slow down or block a session. Existing hooks are preserved. Sessions started after installing pick them up; running ones need `/hooks` reload or a restart.
+This adds command hooks to `~/.claude/settings.json` (a backup is written next to it) that run `~/.claude/control-tower/hook.sh`, a four-line POSIX shell script that copies the hook's JSON into a spool directory. The hooks are async and always exit 0, so they can never slow down or block a session. Existing hooks are preserved. Sessions started after installing pick them up; running ones need `/hooks` reload or a restart.
 
-Without hooks, Radar falls back to Claude Code's own busy/idle flag and the transcript, which still catches "finished" and "asked a question" but a few seconds later and with less certainty.
+Without hooks, Control Tower falls back to Claude Code's own busy/idle flag and the transcript, which still catches "finished" and "asked a question" but a few seconds later and with less certainty.
 
 ### Summaries and cost
 
@@ -72,7 +72,7 @@ cd app && npm install      # downloads Electron (about 100 MB)
 npm start
 ```
 
-The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, and opens the dashboard in a window. If a `claude-radar` server is already running on the port, the app attaches to it instead of starting another.
+The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, and opens the dashboard in a window. If a `control-tower` server is already running on the port, the app attaches to it instead of starting another.
 
 ## Keys
 
@@ -80,7 +80,7 @@ The tray item shows `2 need you` or the number of working sessions, lists sessio
 
 ## How it works
 
-Claude Code writes everything Radar needs:
+Claude Code writes everything Control Tower needs:
 
 | Source | What it gives |
 |---|---|
@@ -95,9 +95,11 @@ Run the tests with `node --test`.
 
 ## Privacy
 
-Radar binds to `127.0.0.1` only and rejects cross-origin requests, so other web pages cannot read your sessions or trigger actions. Transcripts are read from disk and served only to the page. Summaries send a bounded digest (prompts, last reply, recent tool names) to Anthropic through your own Claude login, the same place the session itself runs.
+Control Tower binds to `127.0.0.1` only and rejects cross-origin requests, so other web pages cannot read your sessions or trigger actions. Transcripts are read from disk and served only to the page. Summaries send a bounded digest (prompts, last reply, recent tool names) to Anthropic through your own Claude login, the same place the session itself runs.
 
 ## Roadmap
+
+- Other providers: the server only needs a reader per tool's on-disk format; the page and the state model are provider-neutral, which is why the name no longer says Claude.
 
 - Package the menu bar app as a signed `.app` so it needs no Node at all.
 - Windows and Linux tray.

@@ -1,4 +1,4 @@
-/* Claude Radar — see docs/DESIGN-SYSTEM.md. One flat background; colour means state; motion means working. */
+/* Control Tower — see docs/DESIGN-SYSTEM.md. One flat background; colour means state; motion means working. */
 :root {
   --bg: #0D1117; --surface: #1B212B; --surface-2: #252D38; --line: #313B49; --line-strong: #485363;
   --text: #E8E6E1; --text-2: #9AA3B2; --text-3: #808A99;

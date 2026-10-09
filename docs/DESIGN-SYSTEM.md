@@ -1,4 +1,4 @@
-# Claude Radar - Design System
+# Control Tower - Design System
 
 **This document replaces `docs/UI-REVAMP.md`, `docs/TREE-LAYOUT.md` and `docs/HEADER.md`. Delete them.** Their good decisions (no sidebar, drawer overlay, top-pinned tree, bus edges, text-only needs-you segment, no counter pills) are carried here; everything else is superseded.
 
@@ -34,7 +34,7 @@ It reads as patchwork because three rounds each added a component with its own r
 
 ## B. Design intent
 
-Radar should feel like a quiet instrument panel beside a terminal: monochrome and still by default, where colour only ever means a state and motion only ever means Claude is doing something right now. The one memorable element is the **light rail**: a state-coloured bar on the left edge of every node that, on a working session, is wider, breathes, and spills light into the card and down the edges to its running agents, the one lit window on a dark street. Everything else is text on one flat background.
+Control Tower should feel like a quiet instrument panel beside a terminal: monochrome and still by default, where colour only ever means a state and motion only ever means Claude is doing something right now. The one memorable element is the **light rail**: a state-coloured bar on the left edge of every node that, on a working session, is wider, breathes, and spills light into the card and down the edges to its running agents, the one lit window on a dark street. Everything else is text on one flat background.
 
 ---
 
@@ -108,10 +108,10 @@ Nothing else loops. Needs-you never pulses continuously; working is the only thi
 ```
 x:0  16   38      112                                                 916 944
 ┌────────────────────────────────────────────────────────────────────────┐ 0
-│  ◎ Radar      ● 1 working  ·  ○ 2 ready  ·  ● 2 need you ⌄         ⚙  │
+│  ▲ Control Tower  ● 1 working  ·  ○ 2 ready  ·  ● 2 need you ⌄         ⚙  │
 └────────────────────────────────────────────────────────────────────────┘ 44  border-bottom 1px --line
    mark 18px; its centre dot IS the live indicator (--ready live, --error lost, --text-3 connecting). No separate live-dot.
-   "Radar" xl. Status: m/500 --text-2; dot 6px in state colour; "·" --text-3 with 12px gaps.
+   "Control Tower" xl. Status: m/500 --text-2; dot 6px in state colour; "·" --text-3 with 12px gaps.
    "2 need you": m/600 --needs, 28px tall hit area, radius 6, hover --surface-2, caret rotates when open.
    Unseen: its dot is filled; all seen: hollow 1px ring. That is the whole seen indicator.
    Settings: 28×28 icon button, --text-2, hover --text.
@@ -148,7 +148,7 @@ Flat `--bg`, 24px margin, projects in one column, groups 40px apart, no spine. F
 
 ```
 Group label row 28px                                                        x=24
-● .claude   Redesigning the Radar dashboard UI                      2 sessions
+● .claude   Redesigning the dashboard UI                      2 sessions
 8px dot (worst state) · name m/600 · headline m --text-2 truncated · count xs --text-3 only if >1
 
 Session node 300×104 (rail 4, text x=16, right padding 16)
@@ -177,7 +177,7 @@ Selected (any state): extra 1.5px --text ring at -3px, radius 8. Arrival into ne
 
 Agent node 224×64 (rail 4, text x=14)
    ┌─┬───────────────────────────────────┐ 0
-   │▌│ Redesign Radar header strip       │ 20  m/600 one line
+   │▌│ Redesign the header strip       │ 20  m/600 one line
    │▌│ Bash: run eslint                  │ 38  s --text-2; finished: "finished · 38m"
    │▌│ ◠ 21 tool calls      ⑂2  sonnet 5 │ 54  xs/500 --text-3; glyph at x=19; "⑂N" only with children; model right-aligned
    └─┴───────────────────────────────────┘ 64
@@ -216,9 +216,9 @@ Edges: parent stub 20px, trunk at COL_GAP/2, --line-strong 1.5px, 6px corners. C
 │ Build a local service to monitor Claude…     │
 │                                              │
 │ agents · 2 of 6 running                      │
-│ ● Redesign Radar header strip        38m     │ rows 28px: 6px dot, m --text truncated, age xs --text-3 right
+│ ● Redesign the header strip        38m     │ rows 28px: 6px dot, m --text truncated, age xs --text-3 right
 │ ● Design the session tree layout     5h      │ hover --surface-2; click opens agent view; all agents, scrolls
-│ ○ Critique Radar UI screenshots      6h      │
+│ ○ Critique UI screenshots      6h      │
 │ summary from 4m ago · refresh                │ xs --text-3; "refresh" / "write one now" = --link
 ├──────────────────────────────────────────────┤ hairline
 │ [⧉ Copy resume]  [⟲ Recent]      [≡ Transcript] │ footer 48px, one row; buttons 28px, 1px --line-strong, radius 6, s/500

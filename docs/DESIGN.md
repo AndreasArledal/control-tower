@@ -1,4 +1,4 @@
-# Claude Radar: design
+# Control Tower: design
 
 Date: 2026-10-09. Status: implemented in this repo.
 
@@ -11,9 +11,9 @@ An engineer runs many Claude Code sessions at once and loses track of them. They
 All under the Claude config dir (`CLAUDE_CONFIG_DIR` or `~/.claude`):
 
 1. `sessions/<pid>.json`: registry of live CLIs. Fields used: `pid`, `sessionId`, `cwd`, `name`, `status` (busy/idle), `startedAt`. Liveness is confirmed with `kill(pid, 0)`.
-2. `projects/<encoded cwd>/<sessionId>.jsonl`: transcript. `encoded cwd` replaces every non-alphanumeric character with `-`. Lines of interest: `user`, `assistant` (content blocks: thinking, text, tool_use), `ai-title`, `summary`, `system`. Assistant lines carry `message.usage`; context size is `input + cache_read + cache_creation`. `uuid`/`parentUuid` make the file a tree, but Radar renders it linearly.
+2. `projects/<encoded cwd>/<sessionId>.jsonl`: transcript. `encoded cwd` replaces every non-alphanumeric character with `-`. Lines of interest: `user`, `assistant` (content blocks: thinking, text, tool_use), `ai-title`, `summary`, `system`. Assistant lines carry `message.usage`; context size is `input + cache_read + cache_creation`. `uuid`/`parentUuid` make the file a tree, but Control Tower renders it linearly.
 3. `projects/<encoded cwd>/<sessionId>/subagents/agent-<id>.jsonl` and `agent-<id>.meta.json` (`agentType`, `description`, `toolUseId`, `spawnDepth`, `isFork`, `requestShape`). The parent is whichever transcript (main or agent) contains `toolUseId`.
-4. Hook spool `claude-radar/events/*.json`, written by `hook.sh` from hook stdin. Files are named with a second-resolution timestamp and applied in mtime order.
+4. Hook spool `control-tower/events/*.json`, written by `hook.sh` from hook stdin. Files are named with a second-resolution timestamp and applied in mtime order.
 
 ## Server
 

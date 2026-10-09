@@ -23,14 +23,16 @@ function png(size, alphaAt) {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4); ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
-// a radar: ring, quarter sweep, radius line and a blip
-const ring = (d, r, w) => Math.max(0, Math.min(1, 1 - (Math.abs(d - r) - w / 2) * 2));
+// a control tower: beacon, mast, cab, column, base (coordinates in an 18-unit grid)
 const alphaAt = (x, y, s) => {
-  const u = s / 18, dx = (x - s / 2) / u, dy = (y - s / 2) / u, d = Math.hypot(dx, dy);
-  const sweep = dx >= 0 && dy <= 0 && d < 7.4 ? 0.3 : 0; // top-right quadrant
-  const line = Math.abs(dx) < 0.8 && dy <= 0 && d < 7.4 ? 1 : 0;
-  const blip = Math.hypot(dx - 3.6, dy + 3.6) < 1.6 ? 1 : 0;
-  return Math.max(ring(d, 7.4, 1.7), sweep, line, blip, d < 1.1 ? 1 : 0);
+  const u = s / 18, px = x / u, py = y / u;
+  const beacon = Math.hypot(px - 9, py - 2.6) < 1.5 ? 1 : 0;
+  const mast = Math.abs(px - 9) < 0.6 && py >= 4 && py <= 5.8 ? 1 : 0;
+  const cabHalf = 5.3 - (py - 5.8) * (1.4 / 3.9); // trapezoid from y 5.8 to 9.7
+  const cab = py >= 5.8 && py <= 9.7 && Math.abs(px - 9) <= cabHalf ? 1 : 0;
+  const column = py > 9.7 && py <= 15.5 && Math.abs(px - 9) <= 1.7 ? 0.75 : 0;
+  const base = py > 15.5 && py <= 16.9 && Math.abs(px - 9) <= 3.7 ? 1 : 0;
+  return Math.max(beacon, mast, cab, column, base);
 };
 writeFileSync(new URL('./iconTemplate.png', import.meta.url), png(18, alphaAt));
 writeFileSync(new URL('./iconTemplate@2x.png', import.meta.url), png(36, alphaAt));

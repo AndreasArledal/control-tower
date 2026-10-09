@@ -19,7 +19,7 @@ export function transcriptPathFor(home, cwd, sessionId) {
   return join(projectsDir(home), encodeProjectDir(cwd), `${sessionId}.jsonl`);
 }
 
-/** Where claude-radar keeps its own state (hook spool, summaries, settings). */
+/** Where Control Tower keeps its own state (hook spool, summaries, settings). */
 export function radarDir(home) {
-  return join(home, 'claude-radar');
+  return join(home, 'control-tower');
 }
