@@ -42,18 +42,18 @@ Radar should feel like a quiet instrument panel beside a terminal: monochrome an
 
 ### Colour
 
-Dark is the default and follows the system; a light theme with the same roles exists (`@media (prefers-color-scheme: light)` and `[data-theme="light"]`), and settings has a theme switch (follow system / light / dark, stored in the browser). Both palettes keep text at or above 4.5:1 on their surfaces; `--text-3` is `#7B8594` dark and `#6B7585` light for that reason, and `--ended` is `#6B7383` dark so ended labels stay legible.
+Dark is the default and follows the system; a light theme with the same roles exists (`@media (prefers-color-scheme: light)` and `[data-theme="light"]`), and settings has a theme switch (follow system / light / dark, stored in the browser). Both palettes keep text at or above 4.5:1 on their surfaces; `--text-3` is `#808A99` dark and `#6B7585` light for that reason, and `--ended` is `#6B7383` dark so ended labels stay legible.
 
 | Token | Hex | Role |
 |---|---|---|
-| `--bg` | `#0F1319` | page and canvas, one flat colour, no grid |
-| `--surface` | `#171C24` | nodes, drawer, popovers, toasts |
-| `--surface-2` | `#1F2630` | hover, selected chip, prompt bubble, selects |
-| `--line` | `#262D38` | hairlines, node stroke |
-| `--line-strong` | `#38414F` | bus trunk, popover border, buttons |
+| `--bg` | `#0D1117` | page and canvas, one flat colour, no grid |
+| `--surface` | `#1B212B` | nodes, drawer, popovers, toasts |
+| `--surface-2` | `#252D38` | hover, selected chip, prompt bubble, selects |
+| `--line` | `#313B49` | hairlines, node stroke |
+| `--line-strong` | `#485363` | bus trunk, popover border, buttons |
 | `--text` | `#E8E6E1` | primary |
 | `--text-2` | `#9AA3B2` | secondary |
-| `--text-3` | `#7B8594` | tertiary, labels, ages |
+| `--text-3` | `#808A99` | tertiary, labels, ages |
 | `--working` | `#5EA2E6` | working / running; the only blue |
 | `--needs` | `#F0A93B` | needs you (question, permission, follow-up) |
 | `--ready` | `#52B08E` | ready for a prompt; finished agents |

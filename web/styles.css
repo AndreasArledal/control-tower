@@ -1,7 +1,7 @@
 /* Claude Radar — see docs/DESIGN-SYSTEM.md. One flat background; colour means state; motion means working. */
 :root {
-  --bg: #0F1319; --surface: #171C24; --surface-2: #1F2630; --line: #262D38; --line-strong: #38414F;
-  --text: #E8E6E1; --text-2: #9AA3B2; --text-3: #7B8594;
+  --bg: #0D1117; --surface: #1B212B; --surface-2: #252D38; --line: #313B49; --line-strong: #485363;
+  --text: #E8E6E1; --text-2: #9AA3B2; --text-3: #808A99;
   --working: #5EA2E6; --needs: #F0A93B; --ready: #52B08E; --ended: #6B7383; --error: #E5655F; --thinking: #A394D9; --link: #B9C3D3;
   --on-needs: #16120A; --shadow-1: -8px 0 24px rgba(0, 0, 0, .45); --shadow-2: 0 8px 24px rgba(0, 0, 0, .5); --glow: 35%;
   --font: 'IBM Plex Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
