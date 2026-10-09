@@ -37,6 +37,16 @@ export function parseLine(raw, i) {
       if (!line.content || typeof line.content !== 'string') return [];
       return [{ ...entryBase(line, i, 'system'), text: line.content, subtype: line.subtype ?? null }];
     }
+    case 'attachment': {
+      // background agents report back as a queued command carrying a <task-notification>
+      const a = line.attachment;
+      if (a?.type === 'queued_command' && typeof a.prompt === 'string' && a.prompt.includes('<task-notification>')) {
+        const e = { ...entryBase(line, i, 'notice'), text: a.prompt };
+        if (e.ts == null && a.timestamp) e.ts = Date.parse(a.timestamp) || null;
+        return [e];
+      }
+      return [];
+    }
     case 'user':
       return parseUser(line, i);
     case 'assistant':

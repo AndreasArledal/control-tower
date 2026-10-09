@@ -43,6 +43,14 @@ test('treats system-injected user text as notice, not prompt', () => {
   assert.equal(e[0].kind, 'notice');
 });
 
+test('a queued task notification attachment becomes a notice', () => {
+  const e = parseLine(L({ ...base, type: 'attachment', attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>', timestamp: '2026-10-09T07:23:10.636Z' } }), 9);
+  assert.equal(e.length, 1);
+  assert.equal(e[0].kind, 'notice');
+  assert.match(e[0].text, /abc123/);
+  assert.equal(parseLine(L({ ...base, type: 'attachment', attachment: { type: 'queued_command', prompt: 'plain queued prompt' } }), 10).length, 0);
+});
+
 test('parses ai-title and ignores attachments', () => {
   assert.equal(parseLine(L({ type: 'ai-title', aiTitle: 'Dashboard', sessionId: 's1' }), 6)[0].kind, 'title');
   assert.equal(parseLine(L({ ...base, type: 'attachment', attachment: { type: 'date' } }), 7).length, 0);
