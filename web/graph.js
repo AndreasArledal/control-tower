@@ -62,8 +62,7 @@ function place(n, x, y) {
 function layoutGroup(p, sessions, expanded) {
   const nodes = [], edges = [];
   let y = LABEL_H;
-  const now = Date.now();
-  sessions.sort((a, b) => UI_RANK[uiState(a, now)] - UI_RANK[uiState(b, now)] || (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
+  sessions.sort((a, b) => UI_RANK[uiState(a)] - UI_RANK[uiState(b)] || (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
   for (const v of sessions) {
     const root = { kind: 'session', id: v.id, sessionId: v.id, data: v, w: SESSION_W, h: SESSION_H, children: agentTree(v, expanded) };
     place(root, 0, y);
@@ -157,17 +156,17 @@ function pill(x, y, text, cls = '') {
 
 function sessionNode(n, { selected, changed, now }) {
   const v = n.data, blocking = v.state === 'question' || v.state === 'permission';
-  const ui = uiState(v, now);
+  const ui = uiState(v);
   const waiting = ui === 'needs' && !blocking;
-  const glyphState = blocking ? v.state : waiting ? 'followup' : ui === 'finished' ? 'done' : ui === 'working' ? 'working' : ui;
-  const footState = ui === 'needs' ? 'followup' : ui === 'finished' ? 'done' : ui;
+  const glyphState = blocking ? v.state : waiting ? 'followup' : ui === 'paused' ? 'idle' : ui;
+  const footState = ui === 'needs' ? 'followup' : ui === 'paused' ? 'idle' : ui;
   const nAgents0 = v.agents.length, live0 = v.runningAgents;
   const pillText = nAgents0 ? (live0 ? `${live0} of ${nAgents0} agents` : `${nAgents0} agent${nAgents0 === 1 ? '' : 's'}`) : '';
   const pillW = pillText ? Math.round(pillText.length * 6.4 + 14) : 0;
   const lines = twoLines(v.title, n.w - 26 - (pillW ? pillW + 8 : 0), 13);
   if (lines[1]) lines[1] = fit(v.title.replace(/\s+/g, ' ').trim().slice(lines[0].length).trim(), n.w - 26, 13);
-  const act = fit((ui === 'finished' || ui === 'idle') && !v.followUp && v.summary?.headline ? v.summary.headline : plain(activityLine(v)), n.w - 26, 12);
-  const sinceTs = waiting ? v.followUp.since : ui === 'idle' || ui === 'finished' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
+  const act = fit(plain(activityLine(v)), n.w - 26, 12);
+  const sinceTs = waiting ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
   const since = sinceTs ? agoCoarse(sinceTs, now) : '';
   const nAgents = v.agents.length, live = v.runningAgents;
   const fy = n.h - 15, my = n.h - 34; // footer row and the meta row above it
@@ -175,7 +174,7 @@ function sessionNode(n, { selected, changed, now }) {
   const barW = 44, barX = n.w - 12 - 30 - barW;
   const model = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');
   return `<g class="node session ${footState} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(stateLabel(footState))}">
-    ${blocking ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : waiting ? `<rect class="ring soft" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ui === 'finished' ? `<rect class="ring ready" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ''}
+    ${blocking ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : waiting ? `<rect class="ring soft" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ''}
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
     <rect class="rail" width="4" height="${n.h}"></rect>
     <text class="title" x="16" y="22">${esc(lines[0])}</text>

@@ -99,7 +99,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .node.selected rect.box { stroke: var(--text); }
 .node rect.rail { rx: 0; }
 .node.working rect.rail, .node.running rect.rail { fill: var(--working); }
-.node.working rect.box, .node.running rect.box { stroke: color-mix(in srgb, var(--working) 40%, var(--border)); }
+.node.working rect.box, .node.running rect.box { stroke: color-mix(in srgb, var(--working) 70%, var(--border)); stroke-width: 1.5; }
+.node.session.working rect.box { fill: color-mix(in srgb, var(--working) 7%, var(--surface)); }
+.node.session.working text.sub { fill: var(--working); }
+.node.session.idle, .node.session.done { opacity: .82; }
+.node.session.idle:hover, .node.session.done:hover, .node.session.idle.selected, .node.session.done.selected { opacity: 1; }
 .node.question rect.rail, .node.permission rect.rail { fill: var(--blocking); }
 .node.done rect.rail { fill: var(--ready); }
 .node.idle rect.rail { fill: var(--idle); }
@@ -270,6 +274,7 @@ button.primary { background: var(--working); color: #0B1220; border: 0; border-r
 .toasts { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 10; width: 300px; }
 .toast { background: var(--surface); border-left: 3px solid var(--blocking); border-radius: 0 4px 4px 0; padding: 7px 10px; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, .35); animation: slideup .18s var(--ease); font-size: 12.5px; }
 .toast.done { border-left-color: var(--ready); }
+.toast.quiet { border-left-color: var(--idle); opacity: .9; }
 .toast .t { font-weight: 500; display: flex; justify-content: space-between; gap: 8px; }
 .toast .t .x { color: var(--text-faint); border: 0; background: none; padding: 0 2px; }
 .toast .m { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

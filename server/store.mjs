@@ -253,7 +253,7 @@ export class RadarStore extends EventEmitter {
     const followUp = judgedWaiting ? { reason: s.summary.waitingFor || s.summary.next || 'Waiting for your reply', since: m.lastAssistantAt ?? s.summary.at } : null;
     return {
       id: s.id, pid: s.pid, name: s.name, title: m.title, cwd: s.cwd, projectId: s.cwd, alive: s.alive, kind: s.kind,
-      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: ATTENTION.has(r.state) || Boolean(followUp), followUp,
+      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: r.state === 'question' || r.state === 'permission' || Boolean(followUp), followUp,
       activity: act, lastPrompt: clip(m.lastPrompt, 400), lastPromptAt: m.lastPromptAt, firstPrompt: clip(m.firstPrompt, 400),
       lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
       lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
@@ -289,7 +289,7 @@ export class RadarStore extends EventEmitter {
     }
     const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
     const attention = sessions.filter((v) => v.needsYou).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
-      .map((v) => ({ sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: v.followUp && !ATTENTION.has(v.state) ? 'followup' : v.state, since: v.followUp && !ATTENTION.has(v.state) ? v.followUp.since : v.stateSince, message: v.followUp && !ATTENTION.has(v.state) ? v.followUp.reason : (v.stateMessage ?? (v.state === 'done' ? clip(v.lastAssistantText, 200) : null)), seen: (this.seen.get(v.id) ?? -1) >= ((v.followUp && !ATTENTION.has(v.state) ? v.followUp.since : v.stateSince) ?? 0) }));
+      .map((v) => { const blocking = v.state === 'question' || v.state === 'permission'; const since = blocking ? v.stateSince : v.followUp.since; return { sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: blocking ? v.state : 'followup', since, message: blocking ? v.stateMessage : v.followUp.reason, seen: (this.seen.get(v.id) ?? -1) >= (since ?? 0) }; });
     const unseen = attention.filter((a) => !a.seen).length;
     return {
       generatedAt: this._now(), hooksSeen: this.hooksSeen, hooksInstalled: this.hooksInstalled(),

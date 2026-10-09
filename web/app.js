@@ -57,7 +57,9 @@ function detectTransitions(snap) {
     const key = v.state + (v.followUp ? ':fu' : '');
     if (prev === undefined || prev === key) continue;
     state.changedAt.set(v.id, now);
-    if (v.needsYou && !snap.attention.find((a) => a.sessionId === v.id)?.seen) toast(v); else dismissToast(v.id);
+    if (v.needsYou && !snap.attention.find((a) => a.sessionId === v.id)?.seen) toast(v);
+    else if (v.state === 'done' && prev.startsWith('working')) toast(v, true); // a turn ended: quiet, auto-dismissing
+    else dismissToast(v.id);
   }
   for (const v of snap.sessions) for (const a of v.agents) {
     const k = 'a:' + a.id, prev = state.lastStates.get(k);
@@ -68,14 +70,13 @@ function detectTransitions(snap) {
 
 /* ---------- top bar: status line, attention badge, settings ---------- */
 function renderStatus(snap) {
-  const now = Date.now(), live = snap.sessions.filter((s) => s.alive);
-  const n = (st) => live.filter((s) => uiState(s, now) === st).length;
+  const live = snap.sessions.filter((s) => s.alive);
+  const n = (st) => live.filter((s) => uiState(s) === st).length;
   const agents = live.reduce((k, s) => k + s.runningAgents, 0);
   const parts = [];
   if (n('working')) parts.push(`<span class="st working"><i></i>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
   if (n('needs')) parts.push(`<span class="st blocking"><i></i>${n('needs')} need${n('needs') === 1 ? 's' : ''} you</span>`);
-  if (n('finished')) parts.push(`<span class="st done"><i></i>${n('finished')} finished</span>`);
-  if (n('idle')) parts.push(`<span class="st idle"><i></i>${n('idle')} idle</span>`);
+  if (n('paused')) parts.push(`<span class="st idle"><i></i>${n('paused')} paused</span>`);
   $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
 }
 
@@ -124,11 +125,10 @@ function visibleProjects(snap = state.snap) {
 
 function renderRail(snap) {
   const all = state.mode !== 'pick';
-  const now = Date.now();
   const chips = listedProjects(snap).map((p) => {
-    const states = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v, now));
+    const states = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v));
     const attn = states.filter((s) => s === 'needs').length;
-    const dot = attn ? 'blocking' : states.includes('working') ? 'working' : states.includes('finished') ? 'done' : p.live ? 'idle' : 'exited';
+    const dot = attn ? 'blocking' : states.includes('working') ? 'working' : p.live ? 'idle' : 'exited';
     return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}${attn ? `\n${attn} session${attn === 1 ? '' : 's'} need${attn === 1 ? 's' : ''} you` : ''}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n ${attn ? 'attn' : ''}">${attn ? `${attn} of ${p.live}` : (p.live || p.sessions.length)}</span></button>`;
   }).join('');
   const nActive = listedProjects(snap).filter((p) => p.active).length;
@@ -287,13 +287,13 @@ function actBtn(act, icon, label, title = label) { return `<button class="act" d
 
 function renderSessionHead(v, now) {
   const resume = `cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`;
-  const ui = uiState(v, now);
-  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp && ui === 'needs' ? `Needs you: ${plain(v.followUp.reason)}` : ui === 'finished' && v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
+  const ui = uiState(v);
+  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp && ui === 'needs' ? `Needs you: ${plain(v.followUp.reason)}` : '';
   const stats = [[`${Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000)))}%`, 'context used'], [String(v.turns), v.turns === 1 ? 'turn' : 'turns'], [String(v.toolCalls), 'tool calls'], v.agents.length ? [String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents'] : null, [shortModelName(v.model) || '–', v.effort ? `${v.effort} effort` : 'model'], v.startedAt ? [duration(now - v.startedAt), 'running'] : null].filter(Boolean);
   const errors = v.errors ? `<span class="stat err"><b>${v.errors}</b>${v.errors === 1 ? 'error' : 'errors'}</span>` : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
-    <div class="meta"><span class="pill ${ui === 'needs' ? (v.state === 'question' || v.state === 'permission' ? v.state : 'followup') : ui === 'finished' ? 'done' : ui}">${esc(stateLabel(ui === 'needs' && (v.state === 'question' || v.state === 'permission') ? v.state : ui))}${v.stateSince ? ' · ' + ago(ui === 'idle' || ui === 'finished' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
+    <div class="meta"><span class="pill ${ui === 'needs' ? (v.state === 'question' || v.state === 'permission' ? v.state : 'followup') : ui === 'paused' ? 'idle' : ui}">${esc(stateLabel(ui === 'needs' && (v.state === 'question' || v.state === 'permission') ? v.state : ui))}${v.stateSince ? ' · ' + ago(ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
     ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : ''}
     <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}${errors}</div>`;
   const s = v.summary;
@@ -307,7 +307,7 @@ function renderSessionHead(v, now) {
       <div class="headline">${esc(s.headline)}</div>
       ${s.goal ? `<section class="sec"><h3>Goal</h3><p>${esc(s.goal)}</p></section>` : ''}
       ${s.done?.length ? `<section class="sec"><h3>Done so far</h3><ul class="done">${s.done.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></section>` : s.progress ? `<section class="sec"><h3>So far</h3><p>${esc(s.progress)}</p></section>` : ''}
-      ${s.now ? `<section class="sec"><h3>${v.state === 'working' ? 'Now' : 'Ended with'}</h3><p>${esc(s.now)}</p></section>` : ''}
+      ${s.now ? `<section class="sec"><h3>${v.state === 'working' ? 'Now' : 'Where it stopped'}</h3><p>${esc(s.now)}</p></section>` : ''}
       ${live}
       ${s.next ? `<section class="sec next ${v.needsYou ? 'attn' : ''}"><h3>${v.needsYou ? 'Needs you' : 'Next'}</h3><p>${esc(s.next)}</p></section>` : ''}
       ${agentsBlock}
@@ -381,10 +381,10 @@ async function showHistory(cwd) {
 function shellQuote(s) { return /^[\w\/.~-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`; }
 
 /* ---------- toasts (in-page only) ---------- */
-function toast(v) {
+function toast(v, quiet = false) {
   dismissToast(v.id);
   const el = document.createElement('div');
-  el.className = `toast ${v.state}`;
+  el.className = `toast ${quiet ? 'quiet' : v.state}`;
   const fu = v.followUp && (v.state === 'idle' || v.state === 'done');
   const msg = fu ? plain(v.followUp.reason) : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn', 120) : plain(v.stateMessage || activityLine(v));
   el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} ${esc(stateLabel(fu ? 'followup' : v.state === 'question' || v.state === 'permission' ? v.state : uiState(v)))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
@@ -392,7 +392,7 @@ function toast(v) {
   $('toasts').appendChild(el);
   state.toasts.set(v.id, el);
   while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
-  if (v.state === 'done') setTimeout(() => dismissToast(v.id), 20_000);
+  if (quiet) setTimeout(() => dismissToast(v.id), 15_000);
 }
 function dismissToast(id) { const el = state.toasts.get(id); if (el) { el.remove(); state.toasts.delete(id); } }
 

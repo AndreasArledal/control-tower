@@ -59,14 +59,19 @@ test('store builds projects, sessions, agents and reacts to hook events', async 
   await store.tick();
   snap = store.snapshot();
   assert.equal(snap.sessions[0].state, 'done');
+  assert.equal(snap.attention.length, 0, 'a plain turn end is not attention');
+  assert.equal(snap.hooksSeen, true);
+  // a follow-up verdict makes it attention; seen clears the count but not the state
+  store.sessions.get(sid).summary = { headline: 'h', goal: '', done: [], now: '', next: '', status: 'waiting_for_user', waitingFor: 'Pick one', at: clock + 1 };
+  snap = store.snapshot();
   assert.equal(snap.attention.length, 1);
   assert.equal(snap.unseen, 1);
-  assert.equal(snap.hooksSeen, true);
   store.markSeen(sid);
   snap = store.snapshot();
   assert.equal(snap.sessions[0].state, 'done', 'seen does not change the state');
   assert.equal(snap.attention[0].seen, true);
   assert.equal(snap.unseen, 0);
+  store.sessions.get(sid).summary = null;
 
   // a new prompt makes it working again
   appendFileSync(transcript, L({ ...base(sid, 15), type: 'user', message: { role: 'user', content: 'Now test it' }, origin: { kind: 'human' } }));

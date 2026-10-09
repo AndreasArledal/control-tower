@@ -43,23 +43,29 @@ export function plain(s) {
 
 export function clip(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
-export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'idle', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' };
+export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'paused', paused: 'paused', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' };
 
-const HOUR = 60 * 60 * 1000;
+/** The summary's verdict, only if it was written after the last reply it judges. */
+export function verdict(v) {
+  const s = v.summary;
+  if (!s?.status) return null;
+  if ((s.at ?? 0) < (v.lastAssistantAt ?? 0) - 1000) return null;
+  return s.status;
+}
+
 /**
- * The five states the page speaks in, derived from the server's finer ones:
- * working · needs you (blocked on a prompt, or the last reply asked you something) · finished
- * (completed with nothing asked, within the last hour) · idle (nothing for over an hour) · ended.
+ * The four states the page speaks in, derived from the server's finer ones:
+ * working · needs you (blocked on a prompt, or the last reply asked you something) ·
+ * paused (turn ended, waiting for your next prompt; the summary says where it stands) · ended.
+ * No "finished": a model reading one reply cannot know whether you intend to continue.
  */
-export function uiState(v, now = Date.now()) {
+export function uiState(v) {
   if (!v.alive) return 'exited';
   if (v.state === 'working') return 'working';
   if (v.state === 'question' || v.state === 'permission' || v.followUp) return 'needs';
-  const last = v.lastAssistantAt ?? v.lastActivityAt;
-  if (v.state === 'done' || (last && now - last < HOUR)) return 'finished';
-  return 'idle';
+  return 'paused';
 }
-export const UI_RANK = { needs: 0, finished: 1, working: 2, idle: 3, exited: 4 };
+export const UI_RANK = { needs: 0, working: 1, paused: 2, exited: 3 };
 
 export function stateLabel(s) { return STATE_LABEL[s] ?? s; }
 
@@ -68,7 +74,7 @@ export function activityLine(v) {
   if (v.state === 'question') return a.label || v.stateMessage || 'Waiting for your answer';
   if (v.state === 'permission') return v.stateMessage || 'Waiting for permission';
   if (v.followUp && (v.state === 'done' || v.state === 'idle')) return clip(plain(v.followUp.reason), 90);
-  if (v.state === 'done' || v.state === 'idle') return clip(plain(v.lastAssistantText) || 'Finished', 90);
+  if (v.state === 'done' || v.state === 'idle') return clip(plain(v.summary?.now || v.lastAssistantText) || 'Waiting for your next prompt', 90);
   if (v.state === 'exited') return 'Session ended';
   if (a.kind === 'tool') return `${a.tool}: ${a.label || ''}`;
   if (a.kind === 'thinking') return a.label || 'Thinking';
