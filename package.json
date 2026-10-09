@@ -1,0 +1,13 @@
+{
+  "name": "claude-radar",
+  "version": "0.1.0",
+  "description": "Local mission control for your Claude Code sessions: see every session and agent, what it is thinking, and when it needs you.",
+  "type": "module",
+  "bin": { "claude-radar": "bin/claude-radar.mjs" },
+  "scripts": {
+    "start": "node bin/claude-radar.mjs",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}

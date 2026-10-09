@@ -1,0 +1,62 @@
+# Claude Radar: design
+
+Date: 2026-10-09. Status: implemented in this repo.
+
+## Intent
+
+An engineer runs many Claude Code sessions at once and loses track of them. They want one local page that shows every session and its agents as a graph, lets them read any session's reasoning, and tells them (in the page, never via OS notifications) when a session needs input or has finished. Summaries should make a session understandable at a glance. Portability matters: anyone with Claude Code should be able to run it; a standalone menu bar app is a bonus.
+
+## Data sources
+
+All under the Claude config dir (`CLAUDE_CONFIG_DIR` or `~/.claude`):
+
+1. `sessions/<pid>.json`: registry of live CLIs. Fields used: `pid`, `sessionId`, `cwd`, `name`, `status` (busy/idle), `startedAt`. Liveness is confirmed with `kill(pid, 0)`.
+2. `projects/<encoded cwd>/<sessionId>.jsonl`: transcript. `encoded cwd` replaces every non-alphanumeric character with `-`. Lines of interest: `user`, `assistant` (content blocks: thinking, text, tool_use), `ai-title`, `summary`, `system`. Assistant lines carry `message.usage`; context size is `input + cache_read + cache_creation`. `uuid`/`parentUuid` make the file a tree, but Radar renders it linearly.
+3. `projects/<encoded cwd>/<sessionId>/subagents/agent-<id>.jsonl` and `agent-<id>.meta.json` (`agentType`, `description`, `toolUseId`, `spawnDepth`, `isFork`, `requestShape`). The parent is whichever transcript (main or agent) contains `toolUseId`.
+4. Hook spool `claude-radar/events/*.json`, written by `hook.sh` from hook stdin. Files are named with a second-resolution timestamp and applied in mtime order.
+
+## Server
+
+Zero-dependency Node (ESM). Modules:
+
+- `paths.mjs`: config dir, project dir encoding.
+- `registry.mjs`: read the registry, pid liveness.
+- `transcript.mjs`: `parseLine` normalises a raw line into entries (`prompt`, `thinking`, `text`, `tool_use`, `tool_result`, `title`, `notice`, `system`, `summary`). `TranscriptTailer` reads appended bytes by offset, carries an unfinished tail as bytes (UTF-8 safe), and restarts on truncation.
+- `model.mjs`: `SessionModel` folds entries into facts (title, prompts, last reply, pending tool calls, counts, context tokens). `resolveState` and `resolveAgentState` are pure.
+- `hook-events.mjs`: normalise hook payloads; pure reducer over per-session hook state.
+- `hooks-install.mjs` / `hooks-ctl.mjs`: merge/remove hooks in settings.json idempotently, refuse to touch unparseable settings, keep a backup.
+- `summarizer.mjs`: digest builder, `claude -p` runner (stripped), serial queue with on-disk cache.
+- `store.mjs`: the orchestrator. `tick()` once a second: registry → spool → transcripts → agents → derive. Emits `change` with a snapshot only when something visible changed. Serves timelines by stable `seq`, with a memory cap per transcript.
+- `index.mjs`: HTTP + SSE, static files, same-origin guard.
+- `start.mjs`: boots everything in-process (used by the CLI and the menu bar app).
+
+## State resolution
+
+Per session, in priority order:
+
+1. process gone or `SessionEnd` → `exited`
+2. hook attention (`PermissionRequest`, `Notification:permission_prompt`, `PreToolUse:AskUserQuestion`) → `permission` / `question`
+3. transcript shows a pending `AskUserQuestion` → `question`
+4. `doneAt` (hook `Stop`, or registry busy→idle flip) newer than the last prompt and not acknowledged → `done`
+5. registry busy, or transcript activity within 4 s → `working`
+6. otherwise `idle`
+
+Attention clears when the user acknowledges in the page, when a new prompt arrives, or (for permissions) when the transcript moves past the prompt.
+
+Agents: `done` on `SubagentStop`, on the parent's tool result (foreground agents only; background launches return immediately), or on a final `end_turn` text with no pending tool calls; `exited` with the session; otherwise `running`.
+
+## Summaries
+
+Triggered automatically when a live session is first seen and whenever it enters `done`/`question`/`permission`; manually from the panel; never when the mode is `off`. One job at a time, 20 s cooldown per session, cached by `session:entryCount:state`. The digest is bounded (first prompt, last three prompts, last reply, last twelve tool calls, agents). Output is JSON `{headline, progress, needs}` enforced with `--json-schema`.
+
+## Web
+
+Plain ES modules, no build. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked, agents to the right, finished agents folded after four), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
+
+## Menu bar app
+
+`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The window is the same page.
+
+## Testing
+
+`node --test`: parser, tailer (partial lines, UTF-8 split, vanished file), model, state rules, hook reducer, settings merge, hooks controller, summarizer queue and digest, store integration against a fake config dir, HTTP routes and the origin guard.

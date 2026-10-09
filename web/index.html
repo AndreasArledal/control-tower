@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Radar</title>
+<meta name="description" content="Every Claude Code session on this machine, what it is doing, and when it needs you.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-dot" id="live-dot" title="Connecting"></span><span class="brand-name">Radar</span><span class="brand-sub" id="brand-sub">connecting…</span></div>
+  <div class="topbar-right">
+    <label class="summaries-ctl" title="Summaries are written by a cheap model via your own claude login. About a fifth of a cent each.">
+      <span>Summaries</span>
+      <select id="summaries-mode">
+        <option value="auto">automatic</option>
+        <option value="manual">on request</option>
+        <option value="off">off</option>
+      </select>
+    </label>
+    <button class="ghost" id="hooks-btn" hidden>Install hooks</button>
+    <button class="ghost" id="ack-all" hidden>Mark all as seen</button>
+  </div>
+</header>
+
+<div class="hooks-note" id="hooks-note" hidden></div>
+
+<main class="layout">
+  <aside class="sidebar">
+    <section class="attention" id="attention"></section>
+    <section class="projects">
+      <div class="section-head"><span>Projects</span><button class="link" id="select-all">all</button></div>
+      <ul id="project-list" class="project-list"></ul>
+    </section>
+  </aside>
+
+  <section class="canvas-wrap" id="canvas-wrap">
+    <div class="canvas-tools">
+      <button class="ghost small" id="fit-btn" title="Fit everything in view">fit</button>
+      <button class="ghost small" id="zoom-out" title="Zoom out">−</button>
+      <button class="ghost small" id="zoom-in" title="Zoom in">+</button>
+      <label class="toggle small"><input type="checkbox" id="show-exited"> show finished sessions</label>
+    </div>
+    <svg id="graph" class="graph" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z"></path></marker>
+      </defs>
+      <g id="viewport"></g>
+    </svg>
+    <div class="empty" id="empty" hidden></div>
+  </section>
+
+  <aside class="detail" id="detail">
+    <div class="detail-empty" id="detail-empty">
+      <p>Select a session or an agent to read what it is doing.</p>
+      <p class="muted">Amber means it is waiting for you. Mint means it just finished. Blue is working.</p>
+    </div>
+    <div class="detail-body" id="detail-body" hidden>
+      <div class="detail-head" id="detail-head"></div>
+      <div class="detail-summary" id="detail-summary"></div>
+      <div class="detail-stats" id="detail-stats"></div>
+      <div class="stream-tools">
+        <label class="toggle"><input type="checkbox" data-filter="thinking" checked> thinking</label>
+        <label class="toggle"><input type="checkbox" data-filter="tools" checked> tools</label>
+        <label class="toggle"><input type="checkbox" data-filter="text" checked> replies</label>
+        <label class="toggle follow"><input type="checkbox" id="follow" checked> follow</label>
+      </div>
+      <div class="stream" id="stream"><button class="link" id="load-earlier" hidden>Load earlier</button><div id="stream-list"></div></div>
+    </div>
+  </aside>
+</main>
+
+<div class="toasts" id="toasts"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
