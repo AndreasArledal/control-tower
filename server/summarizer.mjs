@@ -12,10 +12,12 @@ export const SUMMARY_SCHEMA = {
     done: { type: 'array', items: { type: 'string' }, description: 'Up to 5 short bullets of what has been accomplished so far, most recent last' },
     now: { type: 'string', description: 'One sentence: what is happening right now, or what it ended with' },
     next: { type: 'string', description: 'One sentence: what comes next, or what the user must decide or provide; empty if nothing' },
+    status: { type: 'string', enum: ['working', 'waiting_for_user', 'complete'], description: 'working: the assistant is still executing. waiting_for_user: its last reply asks a question, offers options, requests a decision, approval or input, or says it will continue once the user replies. complete: the last reply closes the task and asks nothing.' },
+    waiting_for: { type: 'string', description: 'If waiting_for_user: in one short sentence, exactly what the user is being asked; otherwise empty' },
     progress: { type: 'string', description: 'For project digests only: leave empty' },
     needs: { type: 'string', description: 'Leave empty' },
   },
-  required: ['headline', 'goal', 'done', 'now', 'next'],
+  required: ['headline', 'goal', 'done', 'now', 'next', 'status', 'waiting_for'],
 };
 
 export const SYSTEM_PROMPT = 'You write status-board summaries of AI coding sessions for the engineer who runs them, who has several running at once and wants to know what is going on and how far along each one is. Be concrete: name files, features, decisions, numbers. Plain language, no filler, never mention that you are summarizing. Answer only with the requested JSON.';
@@ -44,7 +46,7 @@ export function buildDigest(view, entries, agentEntries = []) {
 /** Digest for a whole project: what its live sessions are up to. */
 export function buildProjectDigest(project, sessions) {
   const lines = sessions.map((v) => `- ${clip(v.title, 100)} (${v.state})${v.summary?.headline ? ': ' + clip(v.summary.headline, 120) : v.lastPrompt ? ': ' + clip(v.lastPrompt, 160) : ''}`);
-  return `Project directory: ${project.path}\nSessions in it:\n${lines.join('\n')}\n\nIn the headline, say in at most 10 words what this project is working on overall. Put one sentence in goal; leave done empty, now and next empty.`;
+  return `Project directory: ${project.path}\nSessions in it:\n${lines.join('\n')}\n\nIn the headline, say in at most 10 words what this project is working on overall. Put one sentence in goal; leave done, now, next and waiting_for empty; status: working.`;
 }
 
 export function parseSummary(out) {
@@ -56,7 +58,8 @@ export function parseSummary(out) {
   if (!obj || typeof obj.headline !== 'string') return null;
   const str = (k) => String(obj[k] ?? '').trim();
   const done = Array.isArray(obj.done) ? obj.done.map((d) => String(d).trim()).filter(Boolean).slice(0, 6) : [];
-  return { headline: obj.headline.trim(), goal: str('goal'), done, now: str('now'), next: str('next') || str('needs'), progress: str('progress') };
+  const status = ['working', 'waiting_for_user', 'complete'].includes(obj.status) ? obj.status : null;
+  return { headline: obj.headline.trim(), goal: str('goal'), done, now: str('now'), next: str('next') || str('needs'), progress: str('progress'), status, waitingFor: str('waiting_for') };
 }
 
 /** Strip the variables Claude Code sets inside a session so the summarizer runs as a plain child. */

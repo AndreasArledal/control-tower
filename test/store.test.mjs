@@ -169,3 +169,23 @@ test('a working session gets its summary refreshed once it is older than the ref
   assert.equal(requests.filter((r) => r.id === sid).length, first + 1, 'refreshed after the interval');
   store.stop();
 });
+
+test('a session the summarizer judges as waiting for the user needs attention and keeps its project active', async () => {
+  const { home, sid } = fakeHome();
+  writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: sid, cwd: '/p/a', name: 'a-1', status: 'idle', startedAt: 1 }));
+  const store = new RadarStore({ home, summarizer: null });
+  let clock = 1_700_000_000_000 + 3 * 60 * 60 * 1000; store._now = () => clock; // three hours later: past the active window
+  await store.tick();
+  assert.equal(store.snapshot().sessions[0].state, 'idle');
+  assert.equal(store.snapshot().projects[0].active, false);
+  const s = store.sessions.get(sid);
+  s.summary = { headline: 'h', goal: '', done: [], now: '', next: '', status: 'waiting_for_user', waitingFor: 'Choose option A or B', at: clock };
+  const snap = store.snapshot();
+  assert.equal(snap.sessions[0].needsYou, true);
+  assert.equal(snap.sessions[0].followUp.reason, 'Choose option A or B');
+  assert.equal(snap.attention[0].state, 'followup');
+  assert.equal(snap.projects[0].active, true);
+  store.markSeen(sid);
+  assert.equal(store.snapshot().unseen, 0);
+  store.stop();
+});

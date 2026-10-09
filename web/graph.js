@@ -132,6 +132,7 @@ function glyph(state, x, y) {
     case 'working': case 'running': return `<path class="arc" d="M${x - 4},${y} a4,4 0 1 1 4,4"></path>`;
     case 'question': return `<circle class="${cls}" cx="${x}" cy="${y}" r="5.5"></circle><text x="${x}" y="${y + 3.5}" text-anchor="middle" class="glyph" style="fill:#16120A">?</text>`;
     case 'permission': return `<path class="${cls}" d="M${x},${y - 5.5} L${x + 5.5},${y} L${x},${y + 5.5} L${x - 5.5},${y} Z"></path>`;
+    case 'followup': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--blocking)" stroke-width="1.6"></circle><text x="${x}" y="${y + 3.5}" text-anchor="middle" class="glyph" style="fill:var(--blocking)">?</text>`;
     case 'done': return `<path d="M${x - 4.5},${y} l3,3 l6,-6" fill="none" stroke="var(--ready)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>`;
     case 'exited': return `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="var(--exited)" stroke-width="1.4" stroke-dasharray="2 2"></circle>`;
     default: return `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="var(--idle)" stroke-width="1.4"></circle>`;
@@ -155,28 +156,30 @@ function pill(x, y, text, cls = '') {
 
 function sessionNode(n, { selected, changed, now }) {
   const v = n.data, blocking = v.state === 'question' || v.state === 'permission';
+  const waiting = Boolean(v.followUp) && (v.state === 'idle' || v.state === 'done');
+  const footState = waiting ? 'followup' : v.state;
   const nAgents0 = v.agents.length, live0 = v.runningAgents;
   const pillText = nAgents0 ? (live0 ? `${live0} of ${nAgents0} agents` : `${nAgents0} agent${nAgents0 === 1 ? '' : 's'}`) : '';
   const pillW = pillText ? Math.round(pillText.length * 6.4 + 14) : 0;
   const lines = twoLines(v.title, n.w - 26 - (pillW ? pillW + 8 : 0), 13);
   if (lines[1]) lines[1] = fit(v.title.replace(/\s+/g, ' ').trim().slice(lines[0].length).trim(), n.w - 26, 13);
   const act = fit(v.state === 'done' && v.summary?.headline ? v.summary.headline : plain(activityLine(v)), n.w - 26, 12);
-  const since = v.stateSince ? agoCoarse(v.stateSince, now) : '';
+  const since = (waiting ? v.followUp.since : v.stateSince) ? agoCoarse(waiting ? v.followUp.since : v.stateSince, now) : '';
   const nAgents = v.agents.length, live = v.runningAgents;
   const fy = n.h - 15, my = n.h - 34; // footer row and the meta row above it
   const pct = v.contextTokens ? Math.min(1, v.contextTokens / contextWindow(v.contextTokens)) : 0;
   const barW = 44, barX = n.w - 12 - 30 - barW;
   const model = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');
-  return `<g class="node session ${v.state} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(stateLabel(v.state))}">
-    ${blocking ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : v.state === 'done' ? `<rect class="ring ready" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ''}
+  return `<g class="node session ${v.state} ${waiting ? 'followup' : ''} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(stateLabel(footState))}">
+    ${blocking ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : waiting ? `<rect class="ring soft" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : v.state === 'done' ? `<rect class="ring ready" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ''}
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
     <rect class="rail" width="4" height="${n.h}"></rect>
     <text class="title" x="16" y="22">${esc(lines[0])}</text>
     ${lines[1] ? `<text class="title" x="16" y="39">${esc(lines[1])}</text>` : ''}
     <text class="sub" x="16" y="${lines[1] ? 58 : 42}">${esc(act)}</text>
     ${model ? `<text class="mono model" x="16" y="${my + 3.5}">${esc(fit(model, n.w - 32, 11))}</text>` : ''}
-    ${glyph(v.state, 22, fy)}
-    <text class="foot state-${v.state}" x="33" y="${fy + 4}">${esc(fit(stateLabel(v.state) + (since ? ` · ${since}` : ''), barX - 100, 11.5))}</text>
+    ${glyph(footState, 22, fy)}
+    <text class="foot state-${footState}" x="33" y="${fy + 4}">${esc(fit(stateLabel(footState) + (since ? ` · ${since}` : ''), barX - 100, 11.5))}</text>
     ${v.contextTokens ? `<g class="ctx"><title>Context window used: ${Math.round(pct * 100)}% of ${contextWindow(v.contextTokens) / 1000}k tokens</title><text class="mono" x="${barX - 6}" y="${fy + 3.5}" text-anchor="end">context</text><rect class="ctx-bar" x="${barX}" y="${fy - 2}" width="${barW}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${barX}" y="${fy - 2}" width="${Math.max(2, barW * pct)}" height="4" rx="2"></rect><text class="mono" x="${n.w - 12}" y="${fy + 3.5}" text-anchor="end">${Math.round(pct * 100)}%</text></g>` : ''}
     ${pillText ? pill(n.w - 12 - pillW, 18, pillText, live ? 'live' : '') : ''}
   </g>`;

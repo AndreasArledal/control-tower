@@ -18,8 +18,8 @@ test('buildDigest includes the facts a summary needs and stays bounded', () => {
 });
 
 test('parseSummary accepts structured output or a JSON result string', () => {
-  assert.deepEqual(parseSummary({ structured_output: { headline: 'h', goal: 'g', done: ['a', 'b'], now: 'n', next: 'x' } }), { headline: 'h', goal: 'g', done: ['a', 'b'], now: 'n', next: 'x', progress: '' });
-  assert.deepEqual(parseSummary({ result: '{"headline":"h2","progress":"p2","needs":"n2"}' }), { headline: 'h2', goal: '', done: [], now: '', next: 'n2', progress: 'p2' });
+  assert.deepEqual(parseSummary({ structured_output: { headline: 'h', goal: 'g', done: ['a', 'b'], now: 'n', next: 'x', status: 'waiting_for_user', waiting_for: 'Pick a database' } }), { headline: 'h', goal: 'g', done: ['a', 'b'], now: 'n', next: 'x', progress: '', status: 'waiting_for_user', waitingFor: 'Pick a database' });
+  assert.deepEqual(parseSummary({ result: '{"headline":"h2","progress":"p2","needs":"n2"}' }), { headline: 'h2', goal: '', done: [], now: '', next: 'n2', progress: 'p2', status: null, waitingFor: '' });
   assert.equal(parseSummary({ result: 'Not logged in', is_error: true }), null);
 });
 

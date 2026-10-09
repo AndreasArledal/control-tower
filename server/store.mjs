@@ -15,7 +15,7 @@ const ATTENTION = new Set(['question', 'permission', 'done']);
 const EXITED_TTL_MS = 6 * 60 * 60 * 1000;
 const SUMMARY_COOLDOWN_MS = 20_000;
 const DEFAULT_REFRESH_MIN = 4;
-const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
+const ACTIVE_WINDOW_MS = 60 * 60 * 1000;
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 const MAX_ENTRIES = 8000, KEEP_ENTRIES = 6000;
@@ -248,9 +248,12 @@ export class RadarStore extends EventEmitter {
     const r = resolveState({ alive: s.alive, busy: s.busy, doneAt, lastPromptAt: Math.max(m.lastPromptAt ?? 0, s.hooks.lastPromptAt ?? 0) || null, attention, pendingQuestion: m.pendingQuestion, lastActivityAt: m.lastActivityAt, now });
     const agents = [...s.agents.values()].map((a) => this._agentView(s, a)).sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
     const act = r.state === 'working' ? m.activity() : (r.state === 'question' ? { kind: 'question', label: r.message ?? '', since: r.since } : { kind: 'idle', label: '', since: r.since });
+    // the summarizer's verdict: the last reply left a question or decision with the user, so this session is not finished even if it looks idle
+    const judgedWaiting = s.alive && (r.state === 'idle' || r.state === 'done') && s.summary?.status === 'waiting_for_user' && (s.summary.at ?? 0) >= (m.lastAssistantAt ?? 0) - 1000;
+    const followUp = judgedWaiting ? { reason: s.summary.waitingFor || s.summary.next || 'Waiting for your reply', since: m.lastAssistantAt ?? s.summary.at } : null;
     return {
       id: s.id, pid: s.pid, name: s.name, title: m.title, cwd: s.cwd, projectId: s.cwd, alive: s.alive, kind: s.kind,
-      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: ATTENTION.has(r.state),
+      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: ATTENTION.has(r.state) || Boolean(followUp), followUp,
       activity: act, lastPrompt: clip(m.lastPrompt, 400), lastPromptAt: m.lastPromptAt, firstPrompt: clip(m.firstPrompt, 400),
       lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
       lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
@@ -282,11 +285,11 @@ export class RadarStore extends EventEmitter {
       p.headline = ps?.headline || fallbackHeadline(mine);
       p.headlineSource = ps ? 'summary' : 'titles';
       // active: something is happening, or someone touched it recently
-      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
+      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || v.followUp || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
     }
     const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
     const attention = sessions.filter((v) => v.needsYou).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
-      .map((v) => ({ sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: v.state, since: v.stateSince, message: v.stateMessage ?? (v.state === 'done' ? clip(v.lastAssistantText, 200) : null), seen: (this.seen.get(v.id) ?? -1) >= (v.stateSince ?? 0) }));
+      .map((v) => ({ sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: v.followUp && !ATTENTION.has(v.state) ? 'followup' : v.state, since: v.followUp && !ATTENTION.has(v.state) ? v.followUp.since : v.stateSince, message: v.followUp && !ATTENTION.has(v.state) ? v.followUp.reason : (v.stateMessage ?? (v.state === 'done' ? clip(v.lastAssistantText, 200) : null)), seen: (this.seen.get(v.id) ?? -1) >= ((v.followUp && !ATTENTION.has(v.state) ? v.followUp.since : v.stateSince) ?? 0) }));
     const unseen = attention.filter((a) => !a.seen).length;
     return {
       generatedAt: this._now(), hooksSeen: this.hooksSeen, hooksInstalled: this.hooksInstalled(),
@@ -311,7 +314,7 @@ export class RadarStore extends EventEmitter {
   _maybeSummarize(s, v, prevState) {
     if (!this.summarizer || this.settings.summaries !== 'auto' || !this.summarizer.available) return;
     if (!v.alive || s.model.turns === 0) return;
-    const enteredAttention = prevState && prevState !== v.state && ATTENTION.has(v.state);
+    const enteredAttention = prevState && prevState !== v.state && (ATTENTION.has(v.state) || v.state === 'idle');
     const firstSight = prevState == null && s.loaded;
     // while a session works, keep its summary fresh so the panel answers "where are we" without reading the transcript
     const refreshMs = Math.max(1, Number(this.settings.summaryRefreshMinutes) || DEFAULT_REFRESH_MIN) * 60_000;
@@ -332,7 +335,7 @@ export class RadarStore extends EventEmitter {
     this.summarizer.request(`project:${p.id}`, key, () => buildProjectDigest(p, live));
   }
 
-  summaryKey(s) { return `${s.id}:${s.model.count}:${s.lastState}`; }
+  summaryKey(s) { return `v2:${s.id}:${s.model.count}:${s.lastState}`; }
 
   requestSummary(id, { force = false } = {}) {
     const s = this.sessions.get(id);
@@ -361,7 +364,7 @@ export class RadarStore extends EventEmitter {
   markSeen(id) {
     const s = this.sessions.get(id); if (!s) return false;
     const v = this._sessionView(s);
-    this.seen.set(id, v.stateSince ?? this._now()); this._version = ''; this._saveState();
+    this.seen.set(id, Math.max(v.stateSince ?? 0, v.followUp?.since ?? 0) || this._now()); this._version = ''; this._saveState();
     return true;
   }
 

@@ -106,6 +106,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .node.exited text, .node.agent.exited text { opacity: .7; }
 .node rect.ring { fill: none; stroke: var(--blocking); stroke-width: 2; rx: 6; animation: ring 2.4s ease-in-out infinite; }
 .node rect.ring.ready { stroke: var(--ready); animation: none; opacity: .8; }
+.node rect.ring.soft { stroke: var(--blocking); animation: none; opacity: .55; stroke-dasharray: 4 3; }
+.node .state-followup { fill: var(--blocking); } .node.followup rect.rail { fill: var(--blocking); }
+.pill.followup { color: var(--blocking); } .att-item.followup { border-left-color: var(--blocking); }
 @keyframes ring { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 .node.changed rect.box { animation: notice .4s ease-out 1; }
 @keyframes notice { 0% { stroke: var(--text); stroke-width: 2; } 100% { stroke: var(--border); stroke-width: 1; } }

@@ -43,7 +43,7 @@ export function plain(s) {
 
 export function clip(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
-export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'idle', exited: 'exited', running: 'running' };
+export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'idle', exited: 'exited', running: 'running', followup: 'waiting for you' };
 
 export function stateLabel(s) { return STATE_LABEL[s] ?? s; }
 
@@ -51,6 +51,7 @@ export function activityLine(v) {
   const a = v.activity ?? {};
   if (v.state === 'question') return a.label || v.stateMessage || 'Waiting for your answer';
   if (v.state === 'permission') return v.stateMessage || 'Waiting for permission';
+  if (v.followUp && (v.state === 'done' || v.state === 'idle')) return clip(plain(v.followUp.reason), 90);
   if (v.state === 'done') return clip(plain(v.lastAssistantText) || 'Finished', 90);
   if (v.state === 'idle') return 'Waiting for your next prompt';
   if (v.state === 'exited') return 'Session ended';
