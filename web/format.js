@@ -43,7 +43,9 @@ export function plain(s) {
 
 export function clip(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
-export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'paused', paused: 'paused', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' };
+export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'ready', paused: 'ready', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' };
+export const STATE_LONG = { ...{ working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'ready for a new prompt', paused: 'ready for a new prompt', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' } };
+export function stateLong(s) { return STATE_LONG[s] ?? stateLabel(s); }
 
 /** The summary's verdict, only if it was written after the last reply it judges. */
 export function verdict(v) {

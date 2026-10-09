@@ -1,4 +1,4 @@
-import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK } from './format.js';
+import { esc, ago, tokens, duration, stateLabel, stateLong, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK } from './format.js';
 import { renderMarkdown } from './stream.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView } from './stream.js';
@@ -76,7 +76,7 @@ function renderStatus(snap) {
   const parts = [];
   if (n('working')) parts.push(`<span class="st working"><i></i>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
   if (n('needs')) parts.push(`<span class="st blocking"><i></i>${n('needs')} need${n('needs') === 1 ? 's' : ''} you</span>`);
-  if (n('paused')) parts.push(`<span class="st idle"><i></i>${n('paused')} paused</span>`);
+  if (n('paused')) parts.push(`<span class="st idle"><i></i>${n('paused')} ready for a prompt</span>`);
   $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
 }
 
@@ -293,7 +293,7 @@ function renderSessionHead(v, now) {
   const errors = v.errors ? `<span class="stat err"><b>${v.errors}</b>${v.errors === 1 ? 'error' : 'errors'}</span>` : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
-    <div class="meta"><span class="pill ${ui === 'needs' ? (v.state === 'question' || v.state === 'permission' ? v.state : 'followup') : ui === 'paused' ? 'idle' : ui}">${esc(stateLabel(ui === 'needs' && (v.state === 'question' || v.state === 'permission') ? v.state : ui))}${v.stateSince ? ' · ' + ago(ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
+    <div class="meta"><span class="pill ${ui === 'needs' ? (v.state === 'question' || v.state === 'permission' ? v.state : 'followup') : ui === 'paused' ? 'idle' : ui}">${esc(stateLong(ui === 'needs' && (v.state === 'question' || v.state === 'permission') ? v.state : ui))}${v.stateSince ? ' · ' + ago(ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
     ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : ''}
     <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}${errors}</div>`;
   const s = v.summary;
@@ -387,7 +387,7 @@ function toast(v, quiet = false) {
   el.className = `toast ${quiet ? 'quiet' : v.state}`;
   const fu = v.followUp && (v.state === 'idle' || v.state === 'done');
   const msg = fu ? plain(v.followUp.reason) : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn', 120) : plain(v.stateMessage || activityLine(v));
-  el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} ${esc(stateLabel(fu ? 'followup' : v.state === 'question' || v.state === 'permission' ? v.state : uiState(v)))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
+  el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} · ${esc(stateLong(fu ? 'followup' : v.state === 'question' || v.state === 'permission' ? v.state : uiState(v)))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
   el.addEventListener('click', (e) => { if (!e.target.classList.contains('x')) focusSession(v.id); markSeen(v.id); dismissToast(v.id); });
   $('toasts').appendChild(el);
   state.toasts.set(v.id, el);

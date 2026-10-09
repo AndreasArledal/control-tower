@@ -100,10 +100,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .node rect.rail { rx: 0; }
 .node.working rect.rail, .node.running rect.rail { fill: var(--working); }
 .node.working rect.box, .node.running rect.box { stroke: color-mix(in srgb, var(--working) 70%, var(--border)); stroke-width: 1.5; }
-.node.session.working rect.box { fill: color-mix(in srgb, var(--working) 7%, var(--surface)); }
-.node.session.working text.sub { fill: var(--working); }
-.node.session.idle, .node.session.done { opacity: .82; }
+.node.session.working rect.box { fill: color-mix(in srgb, var(--working) 10%, var(--surface)); stroke: var(--working); stroke-width: 2; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--working) 35%, transparent)); }
+.node.session.working rect.rail { width: 6px; }
+.node.session.working text.sub { fill: var(--working); font-weight: 500; }
+.node.session.working text.title { fill: #fff; }
+.node.session.idle, .node.session.done { opacity: .7; }
 .node.session.idle:hover, .node.session.done:hover, .node.session.idle.selected, .node.session.done.selected { opacity: 1; }
+.node.agent.running rect.box { fill: color-mix(in srgb, var(--working) 8%, var(--surface-agent)); }
 .node.question rect.rail, .node.permission rect.rail { fill: var(--blocking); }
 .node.done rect.rail { fill: var(--ready); }
 .node.idle rect.rail { fill: var(--idle); }
