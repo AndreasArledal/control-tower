@@ -82,12 +82,14 @@ function renderStatus(snap) {
 function markSeen(id) { const a = state.snap?.attention.find((x) => x.sessionId === id); if (a && !a.seen) { a.seen = true; post(`/api/session/${encodeURIComponent(id)}/seen`); renderBadge(state.snap); dismissToast(id); } }
 
 function renderBadge(snap) {
-  const n = snap.attention.filter((a) => !a.seen).length, b = $('attention-badge');
-  $('attention-count').textContent = n;
-  b.hidden = n === 0;
-  if (state.prevAttention != null && n > state.prevAttention) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); }
-  state.prevAttention = n;
-  if (n === 0) $('attention-pop').hidden = true;
+  const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length, b = $('attention-badge');
+  $('attention-count').textContent = total;
+  b.hidden = total === 0;
+  b.classList.toggle('calm', unseen === 0);
+  b.title = unseen ? `${unseen} new` : 'All seen';
+  if (state.prevAttention != null && unseen > state.prevAttention) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); }
+  state.prevAttention = unseen;
+  if (total === 0) $('attention-pop').hidden = true;
 }
 
 function renderAttentionPop() {
