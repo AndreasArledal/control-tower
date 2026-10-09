@@ -1,14 +1,18 @@
 {
   "name": "control-tower-menubar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "macOS menu bar wrapper for Control Tower",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "icon": "node make-icon.mjs"
+    "icon": "node make-icon.mjs",
+    "package": "electron-packager . \"Control Tower\" --platform=darwin --arch=arm64 --out=dist --overwrite --icon=icon.icns --app-bundle-id=se.arledal.controltower --prune=true --ignore=\"^/dist\" --extra-resource=../server --extra-resource=../web --extra-resource=../hooks",
+    "install-app": "npm run package && rm -rf \"/Applications/Control Tower.app\" && cp -R \"dist/Control Tower-darwin-arm64/Control Tower.app\" /Applications/ && echo \"Installed /Applications/Control Tower.app\""
   },
   "devDependencies": {
-    "electron": "^39.0.0"
-  }
+    "electron": "^39.0.0",
+    "@electron/packager": "^18.3.0"
+  },
+  "productName": "Control Tower"
 }

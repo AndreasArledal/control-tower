@@ -3,6 +3,19 @@
 const { app, Tray, Menu, BrowserWindow, nativeImage, shell } = require('electron');
 const http = require('node:http');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+/** GUI apps get a minimal PATH; borrow the login shell's so `claude` (and wezterm, tmux…) resolve. */
+function fixPath() {
+  if (process.platform === 'win32') return;
+  try {
+    const sh = process.env.SHELL || '/bin/zsh';
+    const out = execFileSync(sh, ['-ilc', 'echo "__PATH__$PATH"'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = out.split('\n').find((l) => l.startsWith('__PATH__'));
+    if (m) process.env.PATH = m.slice(8);
+  } catch { /* keep what we have */ }
+  for (const extra of [path.join(process.env.HOME || '', '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin']) if (!process.env.PATH.split(':').includes(extra)) process.env.PATH += ':' + extra;
+}
 
 const PORT = Number(process.env.PORT || 4747);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -56,7 +69,9 @@ function buildMenu() {
   }
   const mode = snap?.summaries.mode ?? 'auto';
   items.push({ label: 'Summaries', submenu: ['auto', 'manual', 'off'].map((m) => ({ label: { auto: 'Automatic', manual: 'On request', off: 'Off' }[m], type: 'radio', checked: mode === m, click: () => post('/api/settings', { summaries: m }) })) });
-  items.push({ label: 'Open in browser', click: () => shell.openExternal(BASE) }, { type: 'separator' }, { label: 'Quit Control Tower', role: 'quit' });
+  items.push({ label: 'Open in browser', click: () => shell.openExternal(BASE) });
+  if (process.platform === 'darwin' && app.isPackaged) items.push({ label: 'Start at login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked }) });
+  items.push({ type: 'separator' }, { label: 'Quit Control Tower', role: 'quit' });
   return Menu.buildFromTemplate(items);
 }
 
@@ -71,6 +86,7 @@ function showWindow(hash = '') {
 }
 
 app.whenReady().then(async () => {
+  fixPath();
   if (process.platform === 'darwin') app.dock?.hide();
   const icon = nativeImage.createFromPath(path.join(__dirname, 'iconTemplate.png'));
   icon.setTemplateImage(true);

@@ -173,7 +173,7 @@ function sessionNode(n, { selected, changed, arrived, now }) {
     ${meta ? `<text class="meta" x="16" y="66">${esc(fit(meta, n.w - 32, 11))}</text>` : ''}
     ${glyph(glyphKind, 22, 86)}
     <text class="foot ${cls}" x="34" y="90">${esc(fit(label + (since ? ` · ${since}` : ''), 110, 11))}</text>
-    ${contextBar(v, 212, 86, 56)}
+    ${contextBar(v, 196, 86, 52)}
   </g>`;
 }
 

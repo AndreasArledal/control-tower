@@ -67,12 +67,14 @@ Summaries are produced by `claude -p` with every setting source, MCP server, too
 
 ### Menu bar app (macOS)
 
+A standalone app that lives in the menu bar, needs no Node or terminal, and can start at login:
+
 ```sh
-cd app && npm install      # downloads Electron (about 100 MB)
-npm start
+cd app && npm install      # downloads Electron (about 100 MB), one time
+npm run install-app        # builds Control Tower.app and copies it to /Applications
 ```
 
-The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, and opens the dashboard in a window. If a `control-tower` server is already running on the port, the app attaches to it instead of starting another.
+Then open Control Tower from Applications. The tray item shows `2 need you` or the number of working sessions, lists sessions in its menu, opens the dashboard in a window, and has a "Start at login" toggle. The app embeds the server; if a `control-tower` server is already running on the port it attaches to that instead. The app borrows your login shell's PATH so `claude` (for summaries) resolves even when launched from the Dock. The build is unsigned, so it is meant for the machine it was built on; `npm start` runs it from source instead.
 
 ## Keys
 
@@ -101,6 +103,6 @@ Control Tower binds to `127.0.0.1` only and rejects cross-origin requests, so ot
 
 - Other providers: the server only needs a reader per tool's on-disk format; the page and the state model are provider-neutral, which is why the name no longer says Claude.
 
-- Package the menu bar app as a signed `.app` so it needs no Node at all.
+- Sign and notarize the menu bar app so a built copy can be shared.
 - Windows and Linux tray.
 - Per-session cost from transcript usage.
