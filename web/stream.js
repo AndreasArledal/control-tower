@@ -1,4 +1,5 @@
 import { esc, ago, clip, plain } from './format.js';
+const TOOL_CLASS = { Bash: 'cat-shell', Read: 'cat-read', Glob: 'cat-read', Grep: 'cat-read', Write: 'cat-write', Edit: 'cat-write', Agent: 'cat-agent', AskUserQuestion: 'cat-ask', Skill: 'cat-agent' };
 
 const ARG_MAX = 900, RESULT_MAX = 1500;
 
@@ -186,7 +187,7 @@ export class StreamView {
         const agent = e.tool.name === 'Agent' ? (this.agentByTool.get(e.tool.id) ?? null) : null;
         const el = document.createElement('div');
         el.className = 'step'; el.dataset.seq = e.seq;
-        el.innerHTML = `<div class="line"><span class="tool">${esc(e.tool.name)}</span><span class="what">${esc(clip(stepLabel(e), 140))}</span>${agent ? `<span class="agentlink" data-open-agent="${esc(agent)}">open agent</span>` : ''}<span class="age">${age}</span></div><div class="detail"><pre class="args">${esc(rawArgs(e))}</pre><pre class="res muted">…</pre></div>`;
+        el.innerHTML = `<div class="line"><span class="tool ${TOOL_CLASS[e.tool.name] ?? ''}">${esc(e.tool.name)}</span><span class="what">${esc(clip(stepLabel(e), 140))}</span>${agent ? `<span class="agentlink" data-open-agent="${esc(agent)}">open agent</span>` : ''}<span class="age">${age}</span></div><div class="detail"><pre class="args">${esc(rawArgs(e))}</pre><pre class="res muted">…</pre></div>`;
         g.list.appendChild(el); g.count++; g.tools.set(e.tool.name, (g.tools.get(e.tool.name) ?? 0) + 1);
         this.stepByTool.set(e.tool.id, el);
         this.updateGroupHead(g);

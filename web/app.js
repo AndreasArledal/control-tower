@@ -126,7 +126,8 @@ function renderGraph() {
   const snap = state.snap; if (!snap) return;
   const now = Date.now();
   const changed = new Set([...state.changedAt].filter(([, t]) => now - t < 1500).map(([id]) => id));
-  const scene = buildScene(snap, visibleProjects(snap), { expanded: state.expanded, showExited: state.showExited });
+  const wrap = $('canvas-wrap');
+  const scene = buildScene(snap, visibleProjects(snap), { expanded: state.expanded, showExited: state.showExited, availWidth: Math.max(600, wrap.clientWidth - ($('drawer').hidden ? 0 : $('drawer').offsetWidth)) });
   state.scene = scene;
   $('viewport').innerHTML = renderScene(scene, { selected: state.selected, now, changed });
   applyTransform();
@@ -263,7 +264,8 @@ function actBtn(act, icon, label, title = label) { return `<button class="act" d
 function renderSessionHead(v, now) {
   const resume = `cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`;
   const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
-  const stats = [`${tokens(v.contextTokens)} context`, `${v.turns} turn${v.turns === 1 ? '' : 's'}`, `${v.toolCalls} tool call${v.toolCalls === 1 ? '' : 's'}`, v.agents.length ? `${v.agents.length} agent${v.agents.length === 1 ? '' : 's'}` : null, v.errors ? `${v.errors} error${v.errors === 1 ? '' : 's'}` : null, shortModelName(v.model) || null, v.startedAt ? duration(now - v.startedAt) : null].filter(Boolean);
+  const stats = [[tokens(v.contextTokens), 'context'], [String(v.turns), v.turns === 1 ? 'turn' : 'turns'], [String(v.toolCalls), 'tool calls'], v.agents.length ? [String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents'] : null, [shortModelName(v.model) || '–', v.startedAt ? duration(now - v.startedAt) : 'model']].filter(Boolean);
+  const errors = v.errors ? `<span class="stat err"><b>${v.errors}</b>${v.errors === 1 ? 'error' : 'errors'}</span>` : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
     <div class="meta"><span class="pill ${v.state}">${esc(stateLabel(v.state))}${v.stateSince ? ' · ' + ago(v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
@@ -272,27 +274,28 @@ function renderSessionHead(v, now) {
       ${v.alive ? actBtn('focus', 'terminal', 'Terminal', 'Jump to the terminal pane running this session') : ''}
       ${actBtn('copy', 'copy', 'Resume', 'Copy: cd … && claude --resume …')}
       ${actBtn('history', 'history', 'Recent', 'Recent sessions in this project')}
-      ${state.snap.summaries.mode !== 'off' ? actBtn('summarize', 'summary', v.summarizing ? 'Summarizing…' : 'Summarize', 'Write a fresh summary now') : ''}
     </div>
-    <div class="stats">${stats.map((x) => `<span>${esc(x)}</span>`).join('')}</div>`;
+    <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}${errors}</div>`;
   const s = v.summary;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
-  sumEl.innerHTML = s ? `<div class="headline">${esc(s.headline)}</div>${s.progress ? `<div class="progress">${esc(s.progress)}</div>` : ''}${s.needs ? `<div class="needs">${esc(s.needs)}</div>` : ''}<div class="when">summary · ${ago(s.at, now)} ago</div>`
+  const refresh = state.snap.summaries.mode === 'off' ? '' : `<button class="link" data-act="summarize">${v.summarizing ? 'writing…' : (s ? 'refresh' : 'write one now')}</button>`;
+  sumEl.innerHTML = s ? `<div class="headline">${esc(s.headline)}</div>${s.progress ? `<div class="progress">${esc(s.progress)}</div>` : ''}${s.needs ? `<div class="needs"><span class="lbl">Next</span>${esc(s.needs)}</div>` : ''}<div class="when">summary from ${ago(s.at, now)} ago ${refresh}</div>`
     : state.snap.summaries.mode === 'off' ? `<div class="progress">Summaries are off. Turn them on in settings to get a few lines on where this session stands.</div>`
-    : v.summaryError ? `<div class="progress">Summary failed: ${esc(v.summaryError)}</div>` : v.summarizing ? '<div class="progress">Writing a summary…</div>'
-    : (v.lastPrompt ? `<div class="progress"><span class="muted">Latest request</span> ${esc(clip(plain(v.lastPrompt), 240))}</div>` : '<div class="progress">No prompt yet.</div>');
+    : v.summaryError ? `<div class="progress">Summary failed: ${esc(v.summaryError)} ${refresh}</div>` : v.summarizing ? '<div class="progress">Writing a summary…</div>'
+    : (v.lastPrompt ? `<div class="progress"><span class="lbl">Latest request</span>${esc(clip(plain(v.lastPrompt), 240))}</div><div class="when">no summary yet ${refresh}</div>` : '<div class="progress">No prompt yet.</div>');
+  sumEl.querySelector('[data-act="summarize"]')?.addEventListener('click', () => post(`/api/session/${encodeURIComponent(v.id)}/summarize`));
   wireActs(v);
 }
 
 function renderAgentHead(v, a, now) {
   const line = a.state === 'running' ? plain(activityLine({ state: 'working', activity: a.activity })) : a.state === 'done' ? `Finished${a.endedAt ? ' ' + ago(a.endedAt, now) + ' ago' : ''}${a.startedAt && a.endedAt && a.endedAt > a.startedAt ? ' after ' + duration(a.endedAt - a.startedAt) : ''}` : 'Ended with its session';
-  const stats = [`${tokens(a.contextTokens)} context`, `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`, shortModelName(a.model) || 'inherited model', a.startedAt ? duration((a.endedAt ?? now) - a.startedAt) : null].filter(Boolean);
+  const stats = [[tokens(a.contextTokens), 'context'], [String(a.toolCalls), 'tool calls'], [shortModelName(a.model) || 'inherited', 'model'], a.startedAt ? [duration((a.endedAt ?? now) - a.startedAt), 'runtime'] : null].filter(Boolean);
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(a.description || a.type)}">${esc(a.description || a.type)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
     <div class="meta"><span class="pill ${a.state}">${esc(stateLabel(a.state))}</span><span class="where">${esc(String(a.type).split(':').pop())}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''} · in ${esc(v.name || v.title)}</span></div>
     <div class="now">${esc(line)}</div>
     <div class="acts">${actBtn('up', 'up', 'Session', 'Back to the session')}${a.parentAgentId ? actBtn('parent', 'up', 'Parent agent') : ''}</div>
-    <div class="stats">${stats.map((x) => `<span>${esc(x)}</span>`).join('')}</div>`;
+    <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}</div>`;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
   sumEl.innerHTML = a.lastText ? `<div class="progress">${esc(clip(plain(a.lastText), 400))}</div>` : '<div class="progress">No reply from this agent yet.</div>';
   wireActs(v, a);
