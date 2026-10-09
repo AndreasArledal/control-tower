@@ -1,13 +1,16 @@
 import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName } from './format.js';
 
-export const SESSION_W = 300, SESSION_H = 110, AGENT_W = 224, AGENT_H = 62, FOLD_H = 32, COL_GAP = 36, ROW_GAP = 10, SESSION_GAP = 22, GROUP_GAP_X = 44, GROUP_GAP_Y = 36, LABEL_H = 30;
+export const SESSION_W = 300, SESSION_H = 110, AGENT_W = 224, AGENT_H = 62, FOLD_H = 32, COL_GAP = 36, ROW_GAP = 10, SESSION_GAP = 24, GROUP_GAP_Y = 36, LABEL_H = 30, WRAP_ROWS = 8, WRAP_GAP = 12;
 const RECENT_FINISHED = 3;
 const RANK = { question: 0, permission: 0, done: 1, working: 2, idle: 3, exited: 4 };
 
 /** Transcripts do not record the window size; anything past 190k must be running on a 1M window. */
 export function contextWindow(used) { return used > 190_000 ? 1_000_000 : 200_000; }
 
-/** Node tree for one session: running agents always, the most recent finished few, the rest folded. */
+/**
+ * Node tree for one session. Per parent: running agents first (oldest first), then the most recent
+ * finished ones (newest first), then one fold node for the rest, or a "show less" node when expanded.
+ */
 function agentTree(session, expanded) {
   const byParent = new Map();
   for (const a of session.agents) {
@@ -16,36 +19,43 @@ function agentTree(session, expanded) {
     byParent.get(k).push(a);
   }
   const build = (parentId) => {
-    const kids = (byParent.get(parentId) ?? []).slice().sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
-    const running = kids.filter((a) => a.state === 'running');
-    const finished = kids.filter((a) => a.state !== 'running');
+    const kids = byParent.get(parentId) ?? [];
+    const running = kids.filter((a) => a.state === 'running').sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+    const finished = kids.filter((a) => a.state !== 'running').sort((a, b) => (b.endedAt ?? b.lastActivityAt ?? 0) - (a.endedAt ?? a.lastActivityAt ?? 0));
     const foldKey = `${session.id}:${parentId ?? 'root'}`;
-    let shown = kids, folded = 0;
-    if (!expanded.has(foldKey) && finished.length > RECENT_FINISHED) {
-      const keep = finished.slice(-RECENT_FINISHED);
-      folded = finished.length - keep.length;
-      shown = running.concat(keep).sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
-    }
-    const nodes = shown.map((a) => ({ kind: 'agent', id: a.id, sessionId: session.id, sessionModel: session.model, data: a, w: AGENT_W, h: AGENT_H, children: build(a.id) }));
-    if (folded) nodes.unshift({ kind: 'more', id: foldKey, count: folded, w: AGENT_W, h: FOLD_H, children: [] });
+    const isOpen = expanded.has(foldKey);
+    const shownFinished = isOpen ? finished : finished.slice(0, RECENT_FINISHED);
+    const folded = finished.length - shownFinished.length;
+    const nodes = running.concat(shownFinished).map((a) => ({ kind: 'agent', id: a.id, sessionId: session.id, sessionModel: session.model, data: a, w: AGENT_W, h: AGENT_H, children: build(a.id) }));
+    if (folded) nodes.push({ kind: 'more', id: foldKey, count: folded, w: AGENT_W, h: FOLD_H, children: [] });
+    else if (isOpen && finished.length > RECENT_FINISHED) nodes.push({ kind: 'less', id: foldKey, w: AGENT_W, h: FOLD_H, children: [] });
     return nodes;
   };
   return build(null);
 }
 
-/** Tidy-ish tree layout: leaves take rows, parents centre on their children, depth sets the column. Returns the bottom edge. */
-function layoutTree(root, x0, y0) {
-  let cursor = y0;
-  const place = (n, x) => {
-    n.x = x;
-    if (!n.children.length) { n.y = cursor; cursor += n.h + ROW_GAP; return; }
-    for (const c of n.children) place(c, x + n.w + COL_GAP);
-    const first = n.children[0], last = n.children[n.children.length - 1];
-    n.y = Math.max((first.y + last.y + last.h) / 2 - n.h / 2, y0);
-    cursor = Math.max(cursor, n.y + n.h + ROW_GAP);
-  };
-  place(root, x0);
-  return cursor - ROW_GAP;
+/** Height of a node's whole subtree: its children stack below its top edge, in columns of WRAP_ROWS. */
+function subtreeHeight(n) {
+  if (!n.children.length) return n.h;
+  const cols = chunk(n.children, WRAP_ROWS);
+  const colH = cols.map((c) => c.reduce((h, k, i) => h + subtreeHeight(k) + (i ? ROW_GAP : 0), 0));
+  return Math.max(n.h, ...colH);
+}
+const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+
+/**
+ * Top-pinned layout: a node sits at (x, y); its children start at the same y in the next column and
+ * stack downward; nothing is centred, so a session's position never depends on how many agents it has.
+ * Past WRAP_ROWS children the column wraps to a tighter second column at the same depth.
+ */
+function place(n, x, y) {
+  n.x = x; n.y = y;
+  const cols = chunk(n.children, WRAP_ROWS);
+  cols.forEach((col, ci) => {
+    let cy = y;
+    const cx = x + n.w + COL_GAP + ci * (AGENT_W + WRAP_GAP);
+    for (const k of col) { k.col = ci; place(k, cx, cy); cy += subtreeHeight(k) + ROW_GAP; }
+  });
 }
 
 /** Lay out one project as a block at (0,0): label row, then its sessions stacked. */
@@ -55,48 +65,64 @@ function layoutGroup(p, sessions, expanded) {
   sessions.sort((a, b) => RANK[a.state] - RANK[b.state] || (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
   for (const v of sessions) {
     const root = { kind: 'session', id: v.id, sessionId: v.id, data: v, w: SESSION_W, h: SESSION_H, children: agentTree(v, expanded) };
-    const bottom = layoutTree(root, 0, y);
-    const walk = (n, parent, idx, count) => {
-      nodes.push(n);
-      if (parent) edges.push({ from: parent, to: n, idx, count, state: n.kind === 'agent' ? n.data.state : 'folded' });
-      n.children.forEach((c, i) => walk(c, n, i, n.children.length));
-    };
-    walk(root, null, 0, 1);
-    y = bottom + SESSION_GAP;
+    place(root, 0, y);
+    const walk = (n) => { nodes.push(n); if (n.children.length) edges.push({ parent: n, children: n.children }); n.children.forEach(walk); };
+    walk(root);
+    y += subtreeHeight(root) + SESSION_GAP;
   }
   const w = Math.max(SESSION_W, ...nodes.map((n) => n.x + n.w));
   return { p, nodes, edges, w, h: y - SESSION_GAP, label: { name: p.name, headline: p.headline, n: sessions.length, state: p.state } };
 }
 
-/**
- * Projects are packed on shelves: left to right while they fit the available width, then a new row.
- * Urgent projects come first in reading order.
- */
-export function buildScene(snapshot, visibleProjects, { expanded, showExited, availWidth = 960 }) {
+/** Projects stack top to bottom in urgency order, one per row. */
+export function buildScene(snapshot, visibleProjects, { expanded, showExited }) {
   const groups = [];
   for (const p of snapshot.projects.filter((p) => visibleProjects.has(p.id))) {
     const sessions = snapshot.sessions.filter((v) => v.cwd === p.id && (v.alive || v.pinned || showExited));
     if (sessions.length) groups.push(layoutGroup(p, sessions, expanded));
   }
   const nodes = [], edges = [], labels = [];
-  // one project per row, stacked: reads top to bottom in urgency order
-  const M = 20;
-  let y = M;
+  const M = 36;
+  let y = 20;
   for (const g of groups) {
     for (const n of g.nodes) { n.x += M; n.y += y; nodes.push(n); }
     edges.push(...g.edges);
-    labels.push({ ...g.label, x: M, y, w: Math.max(g.w, 440) });
+    labels.push({ ...g.label, x: M, y, w: Math.max(g.w, 440), h: g.h });
     y += g.h + GROUP_GAP_Y;
   }
-  const width = Math.max(300, ...nodes.map((n) => n.x + n.w + M));
-  return { nodes, edges, labels, width, height: y - GROUP_GAP_Y + M };
+  const width = Math.max(300, ...nodes.map((n) => n.x + n.w + 20));
+  return { nodes, edges, labels, width, height: y - GROUP_GAP_Y + 20 };
 }
 
-function edgePath(e) {
-  const spread = Math.min(6, 28 / Math.max(1, e.count - 1));
-  const y1 = e.from.y + e.from.h / 2 + (e.idx - (e.count - 1) / 2) * spread;
-  const x1 = e.from.x + e.from.w, x2 = e.to.x, y2 = e.to.y + e.to.h / 2, c = (x2 - x1) / 2;
-  return `M${x1},${y1} C${x1 + c},${y1} ${x2 - c},${y2} ${x2},${y2}`;
+const anchorIn = (n) => ({ x: n.x, y: n.y + Math.min(n.h / 2, 31) });
+const edgeState = (n) => (n.kind === 'agent' ? n.data.state : n.kind);
+
+/**
+ * Orthogonal bus per parent: a neutral stub out and a neutral vertical trunk at the gap midpoint,
+ * then one short state-coloured stub into each child. Wrapped columns hang off a secondary trunk.
+ */
+function busPaths(e) {
+  const p = e.parent;
+  const ax = p.x + p.w, ay = p.y + p.h / 2;
+  const trunkX = ax + COL_GAP / 2;
+  const r = 6;
+  const parts = [];
+  const cols = chunk(e.children, WRAP_ROWS);
+  cols.forEach((col, ci) => {
+    const tx = ci === 0 ? trunkX : col[0].x - WRAP_GAP / 2;
+    const ys = col.map((k) => anchorIn(k).y);
+    const top = Math.min(ci === 0 ? ay : ys[0], ...ys), bottom = Math.max(ci === 0 ? ay : ys[0], ...ys);
+    if (ci === 0) parts.push(`<path class="bus" d="M${ax},${ay} H${tx} M${tx},${top} V${bottom}"></path>`);
+    else { const prev = cols[ci - 1], lastPrev = prev[prev.length - 1]; const fy = lastPrev.y + subtreeHeight(lastPrev) + ROW_GAP / 2; parts.push(`<path class="bus secondary" d="M${trunkX},${fy} H${tx} M${tx},${Math.min(fy, top)} V${bottom}"></path>`); }
+    for (const k of col) {
+      const { x: kx, y: ky } = anchorIn(k);
+      const cls = `edge ${edgeState(k)}`;
+      const above = ky < ay - 0.5, below = ky > ay + 0.5;
+      const corner = above ? `M${tx},${ky + r} Q${tx},${ky} ${tx + r},${ky}` : below ? `M${tx},${ky - r} Q${tx},${ky} ${tx + r},${ky}` : `M${tx},${ky}`;
+      parts.push(`<path class="${cls}" d="${corner} H${kx}" data-edge="${esc(k.kind + ':' + k.id)}"></path>`);
+    }
+  });
+  return parts.join('');
 }
 
 /** State glyph drawn at (x, y) centre: spinner, ?, ◆, ✓, hollow dot, dashed dot. */
@@ -148,10 +174,10 @@ function sessionNode(n, { selected, changed, now }) {
     <text class="title" x="16" y="22">${esc(lines[0])}</text>
     ${lines[1] ? `<text class="title" x="16" y="39">${esc(lines[1])}</text>` : ''}
     <text class="sub" x="16" y="${lines[1] ? 58 : 42}">${esc(act)}</text>
-    ${model ? `<text class="mono model" x="16" y="${my + 3.5}">${esc(fit(model, barX - 60, 11))}</text>` : ''}
-    ${v.contextTokens ? `<g class="ctx"><title>Context window used: ${Math.round(pct * 100)}% of ${contextWindow(v.contextTokens) / 1000}k tokens</title><text class="mono" x="${barX - 6}" y="${my + 3.5}" text-anchor="end">context</text><rect class="ctx-bar" x="${barX}" y="${my - 2}" width="${barW}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${barX}" y="${my - 2}" width="${Math.max(2, barW * pct)}" height="4" rx="2"></rect><text class="mono" x="${n.w - 12}" y="${my + 3.5}" text-anchor="end">${Math.round(pct * 100)}%</text></g>` : ''}
+    ${model ? `<text class="mono model" x="16" y="${my + 3.5}">${esc(fit(model, n.w - 32, 11))}</text>` : ''}
     ${glyph(v.state, 22, fy)}
-    <text class="foot state-${v.state}" x="33" y="${fy + 4}">${esc(fit(stateLabel(v.state) + (since ? ` · ${since}` : ''), n.w - 50, 11.5))}</text>
+    <text class="foot state-${v.state}" x="33" y="${fy + 4}">${esc(fit(stateLabel(v.state) + (since ? ` · ${since}` : ''), barX - 100, 11.5))}</text>
+    ${v.contextTokens ? `<g class="ctx"><title>Context window used: ${Math.round(pct * 100)}% of ${contextWindow(v.contextTokens) / 1000}k tokens</title><text class="mono" x="${barX - 6}" y="${fy + 3.5}" text-anchor="end">context</text><rect class="ctx-bar" x="${barX}" y="${fy - 2}" width="${barW}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${barX}" y="${fy - 2}" width="${Math.max(2, barW * pct)}" height="4" rx="2"></rect><text class="mono" x="${n.w - 12}" y="${fy + 3.5}" text-anchor="end">${Math.round(pct * 100)}%</text></g>` : ''}
     ${pillText ? pill(n.w - 12 - pillW, 18, pillText, live ? 'live' : '') : ''}
   </g>`;
 }
@@ -181,9 +207,10 @@ function agentNode(n, { selected, changed, now }) {
 }
 
 function moreNode(n) {
-  return `<g class="node more" transform="translate(${n.x},${n.y})" data-more="${esc(n.id)}" tabindex="0" role="button">
+  const less = n.kind === 'less';
+  return `<g class="node more" transform="translate(${n.x},${n.y})" data-more="${esc(n.id)}" data-less="${less ? '1' : ''}" tabindex="0" role="button">
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
-    <text x="14" y="20">${n.count} more finished · show</text>
+    <text x="${n.w / 2}" y="20" text-anchor="middle">${less ? 'show less' : `${n.count} more finished · show`}</text>
   </g>`;
 }
 
@@ -193,7 +220,7 @@ function moreNode(n) {
  * running animations (spinners, edge flow) from restarting on every refresh and stops the "jump".
  */
 export function renderScene(scene, { selected, now, changed }, viewport, cache = { sig: '', nodes: new Map() }) {
-  const sig = scene.nodes.map((n) => `${n.kind}:${n.id}:${n.x},${n.y}`).join('|') + '#' + scene.labels.map((l) => `${l.x},${l.y},${l.headline}`).join('|');
+  const sig = scene.nodes.map((n) => `${n.kind}:${n.id}:${n.x},${n.y}:${n.kind === 'agent' ? n.data.state : ''}`).join('|') + '#' + scene.labels.map((l) => `${l.x},${l.y},${l.headline},${l.h}`).join('|');
   const nodeHtml = new Map();
   for (const n of scene.nodes) {
     const html = n.kind === 'session' ? sessionNode(n, { selected: selected?.sessionId === n.id && !selected?.agentId, changed: changed.has(n.id), now })
@@ -202,8 +229,8 @@ export function renderScene(scene, { selected, now, changed }, viewport, cache =
   }
   if (sig !== cache.sig) {
     const parts = [];
-    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})"><circle class="gdot ${l.state}" cx="5" cy="9" r="4"></circle><text class="group-label" x="16" y="13"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan class="h" dx="10">${esc(fit(l.headline, Math.max(120, l.w - 90 - l.name.length * 7.5), 12))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="13" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
-    for (const e of scene.edges) parts.push(`<path class="edge ${e.state}" d="${edgePath(e)}" data-edge="${esc(e.to.kind + ':' + e.to.id)}"></path>`);
+    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})"><line class="spine" x1="-16" y1="4" x2="-16" y2="${l.h}"></line><circle class="gdot ${l.state}" cx="2" cy="9" r="4"></circle><text class="group-label" x="14" y="13"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan class="h" dx="10">${esc(fit(l.headline, Math.max(160, l.w - 60 - l.name.length * 7.5), 12))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="13" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
+    for (const e of scene.edges) parts.push(busPaths(e));
     parts.push('<g class="nodes">' + [...nodeHtml.values()].join('\n') + '</g>');
     viewport.innerHTML = parts.join('\n');
     cache.sig = sig; cache.nodes = nodeHtml;
@@ -217,7 +244,6 @@ export function renderScene(scene, { selected, now, changed }, viewport, cache =
     const el = els[i++];
     if (cache.nodes.get(key) !== html) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'g'); el.replaceWith(t); t.outerHTML = html; }
   }
-  for (const e of scene.edges) { const p = viewport.querySelector(`[data-edge="${CSS.escape(e.to.kind + ':' + e.to.id)}"]`); if (p && p.getAttribute('class') !== `edge ${e.state}`) p.setAttribute('class', `edge ${e.state}`); }
   cache.nodes = nodeHtml;
 }
 export { TOOL_CLASS };

@@ -81,9 +81,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .group-label .h { fill: var(--text-muted); }
 .group-label.c { fill: var(--text-faint); font-size: 11.5px; }
 .gdot { fill: var(--idle); } .gdot.working { fill: var(--working); } .gdot.question, .gdot.permission { fill: var(--blocking); } .gdot.done { fill: var(--ready); } .gdot.exited { fill: var(--exited); }
-.edge { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
+.bus { fill: none; stroke: var(--border-strong); stroke-width: 1.5; stroke-linecap: round; }
+.bus.secondary { stroke-dasharray: 2 4; }
+.edge { fill: none; stroke: var(--text-faint); stroke-width: 1.5; stroke-linecap: round; }
 .edge.running { stroke: var(--working); stroke-dasharray: 6 6; animation: flow 1.2s linear infinite; }
-.edge.done, .edge.exited, .edge.folded { opacity: .6; }
+.edge.more, .edge.less { stroke-dasharray: 3 4; opacity: .5; }
+.edge.exited { opacity: .5; }
+.spine { stroke: var(--border); stroke-width: 1; }
 @keyframes flow { to { stroke-dashoffset: -12; } }
 
 /* graph: nodes */
@@ -119,7 +123,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .node .arc { fill: none; stroke: var(--working); stroke-width: 1.6; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .node.agent rect.box { fill: var(--surface-agent); }
-.node.agent.done text, .node.agent.exited rect.box { opacity: .85; }
+.node.agent.done, .node.agent.exited { opacity: .62; }
+.node.agent.done:hover, .node.agent.exited:hover, .node.agent.done.selected, .node.agent.exited.selected { opacity: 1; }
 .node.more rect.box { fill: none; stroke-dasharray: 4 3; }
 .node.more text { fill: var(--text-muted); font-size: 12px; }
 .ctx-bar { fill: var(--border); } .ctx-fill { fill: var(--text-faint); } .ctx-fill.warn { fill: var(--blocking); }

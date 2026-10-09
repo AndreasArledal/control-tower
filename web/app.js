@@ -211,7 +211,7 @@ function setupCanvas() {
 
 function activate(node) {
   if (!node) { close(); return; }
-  if (node.dataset.more) { state.expanded.add(node.dataset.more); renderGraph(); return; }
+  if (node.dataset.more) { if (node.dataset.less) state.expanded.delete(node.dataset.more); else state.expanded.add(node.dataset.more); renderGraph(); return; }
   const sid = node.dataset.session, aid = node.dataset.agent || null;
   if (state.selected && state.selected.sessionId === sid && (state.selected.agentId ?? null) === aid) { close(); return; }
   open(sid, aid);
