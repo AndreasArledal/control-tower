@@ -61,7 +61,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
 .chip .dot.working { background: var(--working); } .chip .dot.blocking { background: var(--blocking); } .chip .dot.done { background: var(--ready); } .chip .dot.exited { background: var(--exited); }
 .chip .n { color: var(--text-faint); font-family: var(--mono); font-size: 11.5px; }
-.chip .att { position: absolute; top: -5px; right: -5px; min-width: 14px; height: 14px; padding: 0 4px; border-radius: 999px; background: var(--blocking); color: #16120A; font-size: 10px; font-weight: 600; line-height: 14px; text-align: center; }
+.chip .n.attn { color: var(--blocking); }
 
 /* canvas */
 .canvas-wrap { position: relative; height: calc(100vh - var(--topbar-h) - var(--rail-h)); background: var(--bg-canvas); background-image: radial-gradient(circle, color-mix(in srgb, var(--border) 45%, transparent) 0.8px, transparent 1px); background-size: 32px 32px; overflow: hidden; }

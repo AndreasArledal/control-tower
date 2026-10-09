@@ -127,7 +127,7 @@ function renderRail(snap) {
     const states = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v, now));
     const attn = states.filter((s) => s === 'needs').length;
     const dot = attn ? 'blocking' : states.includes('working') ? 'working' : states.includes('finished') ? 'done' : p.live ? 'idle' : 'exited';
-    return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n">${p.live || p.sessions.length}</span>${attn ? `<span class="att">${attn}</span>` : ''}</button>`;
+    return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}${attn ? `\n${attn} session${attn === 1 ? '' : 's'} need${attn === 1 ? 's' : ''} you` : ''}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n ${attn ? 'attn' : ''}">${attn ? `${attn} of ${p.live}` : (p.live || p.sessions.length)}</span></button>`;
   }).join('');
   const nActive = listedProjects(snap).filter((p) => p.active).length;
   $('rail').innerHTML = `<button class="chip all ${state.mode === 'active' ? 'selected' : ''}" data-project="active" title="Projects that are working, need you, just finished, or were used in the last 30 minutes">Active<span class="n">${nActive}</span></button><button class="chip all ${state.mode === 'all' ? 'selected' : ''}" data-project="*">All</button>` + chips;
