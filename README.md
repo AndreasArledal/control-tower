@@ -40,7 +40,7 @@ Nothing leaves your machine. Control Tower only reads the files Claude Code alre
 ## Run it
 
 ```sh
-git clone <this repo> control-tower
+git clone git@github.com:AndreasArledal/control-tower.git
 cd control-tower
 node bin/control-tower.mjs            # opens http://localhost:4747
 ```
