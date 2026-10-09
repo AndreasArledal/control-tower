@@ -61,7 +61,7 @@ Triggered automatically when a live session is first seen and whenever it enters
 
 ## Web
 
-Plain ES modules, no build. Layout per `docs/UI-REVAMP.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
+Plain ES modules, no build. Visual design per `docs/DESIGN-SYSTEM.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
 
 ## Menu bar app
 
@@ -69,7 +69,7 @@ Plain ES modules, no build. Layout per `docs/UI-REVAMP.md`: top bar, project chi
 
 ## Tree layout
 
-See `docs/TREE-LAYOUT.md`: rows are top-pinned (a session's position never depends on its agent count), edges are an orthogonal bus with a neutral trunk and state-coloured stubs, running agents come first, finished ones are dimmed and folded after three, columns wrap after eight.
+See `docs/DESIGN-SYSTEM.md` §D: rows are top-pinned (a session's position never depends on its agent count), edges are an orthogonal bus with a neutral trunk and state-coloured stubs, running agents come first, finished ones are dimmed and folded after three, columns wrap after eight.
 
 ## Testing
 

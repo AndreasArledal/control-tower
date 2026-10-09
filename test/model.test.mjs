@@ -26,6 +26,12 @@ test('model tracks title, prompts, last text and counts', () => {
   assert.equal(m.lastStopReason, 'end_turn');
 });
 
+test('a task notification in the parent marks the background agent as reported back', () => {
+  const m = new SessionModel();
+  m.ingest(e('notice', { text: '<task-notification>\n<task-id>ab12cd</task-id>\n<status>killed</status>\n</task-notification>' }, 0));
+  assert.equal(m.agentNotices.get('ab12cd'), 'killed');
+});
+
 test('model falls back to the first prompt as title', () => {
   const m = new SessionModel();
   m.ingest(e('prompt', { text: 'A very long first prompt that goes on and on and should be truncated for a title somewhere sensible' }, 0));

@@ -221,7 +221,7 @@ export class RadarStore extends EventEmitter {
     // a background agent's tool_use resolves immediately with "launched", so only a foreground result means finished
     const background = a.meta.requestShape === 'background';
     const parentHasResult = !background && Boolean(toolUseId && parentModel?.resultIds.has(toolUseId));
-    const stopped = a.state === 'done' || s.hooks.stoppedAgents.has(a.id);
+    const stopped = a.state === 'done' || s.hooks.stoppedAgents.has(a.id) || Boolean(parentModel?.agentNotices.has(a.id));
     const state = resolveAgentState({ model: a.model, parentHasResult, stopped, sessionAlive: s.alive });
     if (state === 'done') a.endedAt = Math.max(a.endedAt ?? 0, a.model.lastActivityAt ?? 0) || this._now();
     const spawn = parentModel?.agentSpawns.get(toolUseId);

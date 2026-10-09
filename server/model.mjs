@@ -61,6 +61,7 @@ export class SessionModel {
     this.toolUseIds = new Set();
     this.resultIds = new Set();
     this.agentSpawns = new Map(); // toolUseId -> { description, type, ts }
+    this.agentNotices = new Map(); // agentId -> status from a task notification (completed, killed, failed)
     this.errors = 0;
   }
 
@@ -105,6 +106,12 @@ export class SessionModel {
         this.pendingTools.set(e.tool.id, { name: e.tool.name, input: e.tool.input, ts: e.ts, i: e.i });
         if (e.tool.name === 'Agent') this.agentSpawns.set(e.tool.id, { description: e.tool.input?.description ?? '', type: e.tool.input?.subagent_type ?? null, ts: e.ts });
         break;
+      case 'notice': {
+        // background agents report back through a task notification in the parent transcript
+        const m = /<task-id>([a-z0-9]+)<\/task-id>[\s\S]*?<status>(\w+)<\/status>/.exec(e.text || '');
+        if (m) this.agentNotices.set(m[1], m[2]);
+        break;
+      }
       case 'tool_result':
         this.pendingTools.delete(e.result.toolUseId);
         this.resultIds.add(e.result.toolUseId);

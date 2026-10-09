@@ -1,6 +1,6 @@
 import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName, uiState, UI_RANK } from './format.js';
 
-export const SESSION_W = 300, SESSION_H = 110, AGENT_W = 224, AGENT_H = 62, FOLD_H = 32, COL_GAP = 36, ROW_GAP = 10, SESSION_GAP = 24, GROUP_GAP_Y = 36, LABEL_H = 30, WRAP_ROWS = 8, WRAP_GAP = 12;
+export const SESSION_W = 300, SESSION_H = 104, AGENT_W = 224, AGENT_H = 64, FOLD_H = 28, COL_GAP = 40, ROW_GAP = 8, SESSION_GAP = 24, GROUP_GAP_Y = 40, LABEL_H = 28, WRAP_ROWS = 8, WRAP_GAP = 12;
 const RECENT_FINISHED = 3;
 
 
@@ -71,7 +71,8 @@ function layoutGroup(p, sessions, expanded) {
     y += subtreeHeight(root) + SESSION_GAP;
   }
   const w = Math.max(SESSION_W, ...nodes.map((n) => n.x + n.w));
-  return { p, nodes, edges, w, h: y - SESSION_GAP, label: { name: p.name, headline: p.headline, n: sessions.length, state: p.state } };
+  const worst = sessions.map((v) => uiState(v)).sort((a, b) => UI_RANK[a] - UI_RANK[b])[0];
+  return { p, nodes, edges, w, h: y - SESSION_GAP, label: { name: p.name, headline: p.headline, n: sessions.length, worst } };
 }
 
 /** Projects stack top to bottom in urgency order, one per row. */
@@ -82,8 +83,8 @@ export function buildScene(snapshot, visibleProjects, { expanded, showExited }) 
     if (sessions.length) groups.push(layoutGroup(p, sessions, expanded));
   }
   const nodes = [], edges = [], labels = [];
-  const M = 36;
-  let y = 20;
+  const M = 24;
+  let y = 24;
   for (const g of groups) {
     for (const n of g.nodes) { n.x += M; n.y += y; nodes.push(n); }
     edges.push(...g.edges);
@@ -94,8 +95,8 @@ export function buildScene(snapshot, visibleProjects, { expanded, showExited }) 
   return { nodes, edges, labels, width, height: y - GROUP_GAP_Y + 20 };
 }
 
-const anchorIn = (n) => ({ x: n.x, y: n.y + Math.min(n.h / 2, 31) });
-const edgeState = (n) => (n.kind === 'agent' ? n.data.state : n.kind);
+const anchorIn = (n) => ({ x: n.x, y: n.y + Math.min(n.h / 2, 32) });
+const edgeState = (n) => (n.kind === 'agent' ? AGENT_CLASS[n.data.state] ?? n.data.state : n.kind);
 
 /**
  * Orthogonal bus per parent: a neutral stub out and a neutral vertical trunk at the gap midpoint,
@@ -103,7 +104,7 @@ const edgeState = (n) => (n.kind === 'agent' ? n.data.state : n.kind);
  */
 function busPaths(e) {
   const p = e.parent;
-  const ax = p.x + p.w, ay = p.y + p.h / 2;
+  const ax = p.x + p.w, ay = p.y + Math.min(p.h / 2, 32);
   const trunkX = ax + COL_GAP / 2;
   const r = 6;
   const parts = [];
@@ -125,90 +126,76 @@ function busPaths(e) {
   return parts.join('');
 }
 
-/** State glyph drawn at (x, y) centre: spinner, ?, ◆, ✓, hollow dot, dashed dot. */
-function glyph(state, x, y) {
-  const cls = `state-${state}`;
-  switch (state) {
-    case 'working': case 'running': return `<path class="arc" d="M${x - 4},${y} a4,4 0 1 1 4,4"></path>`;
-    case 'question': return `<circle class="${cls}" cx="${x}" cy="${y}" r="5.5"></circle><text x="${x}" y="${y + 3.5}" text-anchor="middle" class="glyph" style="fill:#16120A">?</text>`;
-    case 'permission': return `<path class="${cls}" d="M${x},${y - 5.5} L${x + 5.5},${y} L${x},${y + 5.5} L${x - 5.5},${y} Z"></path>`;
-    case 'followup': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--blocking)" stroke-width="1.6"></circle><text x="${x}" y="${y + 3.5}" text-anchor="middle" class="glyph" style="fill:var(--blocking)">?</text>`;
-    case 'done': return `<path d="M${x - 4.5},${y} l3,3 l6,-6" fill="none" stroke="var(--ready)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>`;
-    case 'exited': return `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="var(--exited)" stroke-width="1.4" stroke-dasharray="2 2"></circle>`;
-    default: return `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="var(--idle)" stroke-width="1.4"></circle>`;
+const AGENT_CLASS = { running: 'running', done: 'finished', exited: 'ended' };
+const AGENT_LABEL = { running: 'running', finished: 'finished', ended: 'ended' };
+
+/** State glyph centred at (x, y), 12px: spinner, filled ? , ◆, hollow ?, hollow ring, ✓, dashed ring. */
+function glyph(kind, x, y) {
+  switch (kind) {
+    case 'working': case 'running': return `<path class="arc" d="M${x - 5},${y} a5,5 0 1 1 5,5"></path>`;
+    case 'question': return `<circle cx="${x}" cy="${y}" r="6" fill="var(--needs)"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:#16120A">?</text>`;
+    case 'permission': return `<path d="M${x},${y - 6} L${x + 6},${y} L${x},${y + 6} L${x - 6},${y} Z" fill="var(--needs)"></path>`;
+    case 'followup': return `<circle cx="${x}" cy="${y}" r="5.5" fill="none" stroke="var(--needs)" stroke-width="1.5"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:var(--needs)">?</text>`;
+    case 'finished': return `<path d="M${x - 5},${y} l3.5,3.5 l6.5,-7" fill="none" stroke="var(--ready)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>`;
+    case 'ready': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--ready)" stroke-width="1.5"></circle>`;
+    case 'ended': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--ended)" stroke-width="1.5" stroke-dasharray="2.5 2.5"></circle>`;
+    default: return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--text-3)" stroke-width="1.5"></circle>`;
   }
 }
 
-/** Split a title over at most two lines of a given pixel width. */
-function twoLines(text, maxPx, px) {
-  const per = px * 0.56, max = Math.floor(maxPx / per);
-  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
-  if (t.length <= max) return [t];
-  let cut = t.lastIndexOf(' ', max);
-  if (cut < max * 0.5) cut = max;
-  return [t.slice(0, cut).trim(), fit(t.slice(cut).trim(), maxPx, px)];
+function contextBar(v, x, y, w) {
+  if (!v.contextTokens) return '';
+  const win = contextWindow(v.contextTokens), pct = Math.min(1, v.contextTokens / win);
+  return `<g class="ctx"><title>${Math.round(pct * 100)}% of the ${win / 1000}k context window used</title><text class="lbl" x="${x - 8}" y="${y + 4}" text-anchor="end">context</text><rect class="ctx-bar" x="${x}" y="${y - 2}" width="${w}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${x}" y="${y - 2}" width="${Math.max(2, Math.round(w * pct))}" height="4" rx="2"></rect><text class="pct" x="${x + w + 8}" y="${y + 4}">${Math.round(pct * 100)}%</text></g>`;
 }
 
-function pill(x, y, text, cls = '') {
-  const w = Math.round(text.length * 6.4 + 14);
-  return `<g class="pill-g ${cls}"><rect x="${x}" y="${y - 8}" width="${w}" height="16" rx="8"></rect><text class="pill-t" x="${x + w / 2}" y="${y + 3.5}" text-anchor="middle">${esc(text)}</text></g>`;
-}
-
-function sessionNode(n, { selected, changed, now }) {
-  const v = n.data, blocking = v.state === 'question' || v.state === 'permission';
-  const ui = uiState(v);
-  const waiting = ui === 'needs' && !blocking;
-  const glyphState = blocking ? v.state : waiting ? 'followup' : ui === 'paused' ? 'idle' : ui;
-  const footState = ui === 'needs' ? 'followup' : ui === 'paused' ? 'idle' : ui;
-  const nAgents0 = v.agents.length, live0 = v.runningAgents;
-  const pillText = nAgents0 ? (live0 ? `${live0} of ${nAgents0} agents` : `${nAgents0} agent${nAgents0 === 1 ? '' : 's'}`) : '';
-  const pillW = pillText ? Math.round(pillText.length * 6.4 + 14) : 0;
-  const lines = twoLines(v.title, n.w - 26 - (pillW ? pillW + 8 : 0), 13);
-  if (lines[1]) lines[1] = fit(v.title.replace(/\s+/g, ' ').trim().slice(lines[0].length).trim(), n.w - 26, 13);
-  const act = fit(plain(activityLine(v)), n.w - 26, 12);
-  const sinceTs = waiting ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
-  const since = sinceTs ? agoCoarse(sinceTs, now) : '';
+function sessionNode(n, { selected, changed, arrived, now }) {
+  const v = n.data, ui = uiState(v);
+  const cls = ui === 'exited' ? 'ended' : ui;
+  const blocking = v.state === 'question' || v.state === 'permission';
+  const glyphKind = ui === 'needs' ? (blocking ? v.state : 'followup') : cls;
   const nAgents = v.agents.length, live = v.runningAgents;
-  const fy = n.h - 15, my = n.h - 34; // footer row and the meta row above it
-  const pct = v.contextTokens ? Math.min(1, v.contextTokens / contextWindow(v.contextTokens)) : 0;
-  const barW = 44, barX = n.w - 12 - 30 - barW;
-  const model = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');
-  return `<g class="node session ${footState} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(stateLabel(footState))}">
-    ${blocking ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : waiting ? `<rect class="ring soft" x="-2" y="-2" width="${n.w + 4}" height="${n.h + 4}"></rect>` : ''}
+  const count = nAgents ? (live ? `${live} of ${nAgents}` : `${nAgents} agent${nAgents === 1 ? '' : 's'}`) : '';
+  const countW = count ? count.length * 6.2 + 12 : 0;
+  const title = fit(v.title, n.w - 32 - countW, 13);
+  const sinceTs = ui === 'needs' && v.followUp && !blocking ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
+  const since = sinceTs ? agoCoarse(sinceTs, now) : '';
+  const label = ui === 'needs' ? 'needs you' : ui === 'paused' ? 'ready' : ui === 'exited' ? 'ended' : 'working';
+  const act = cls === 'ended' ? `Ended${since ? ' ' + since + ' ago' : ''}` : cls === 'ready' && v.summary?.headline ? v.summary.headline : plain(activityLine(v));
+  const meta = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');
+  return `<g class="node session ${cls} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''} ${arrived ? 'arrived' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(label)}">
+    ${selected || arrived ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : ''}
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
-    <rect class="rail" width="4" height="${n.h}"></rect>
-    <text class="title" x="16" y="22">${esc(lines[0])}</text>
-    ${lines[1] ? `<text class="title" x="16" y="39">${esc(lines[1])}</text>` : ''}
-    <text class="sub" x="16" y="${lines[1] ? 58 : 42}">${esc(act)}</text>
-    ${model ? `<text class="mono model" x="16" y="${my + 3.5}">${esc(fit(model, n.w - 32, 11))}</text>` : ''}
-    ${glyph(glyphState, 22, fy)}
-    <text class="foot state-${footState}" x="33" y="${fy + 4}">${esc(fit(stateLabel(footState) + (since ? ` · ${since}` : ''), barX - 90, 11.5))}</text>
-    ${v.contextTokens ? `<g class="ctx"><title>Context window used: ${Math.round(pct * 100)}% of ${contextWindow(v.contextTokens) / 1000}k tokens</title><text class="mono" x="${barX - 6}" y="${fy + 3.5}" text-anchor="end">context</text><rect class="ctx-bar" x="${barX}" y="${fy - 2}" width="${barW}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${barX}" y="${fy - 2}" width="${Math.max(2, barW * pct)}" height="4" rx="2"></rect><text class="mono" x="${n.w - 12}" y="${fy + 3.5}" text-anchor="end">${Math.round(pct * 100)}%</text></g>` : ''}
-    ${pillText ? pill(n.w - 12 - pillW, 18, pillText, live ? 'live' : '') : ''}
+    <rect class="rail" width="${cls === 'working' ? 6 : 4}" height="${n.h}"></rect>
+    <text class="title" x="16" y="24">${esc(title)}</text>
+    ${count ? `<text class="count" x="${n.w - 16}" y="24" text-anchor="end">${esc(count)}</text>` : ''}
+    <text class="sub" x="16" y="44">${esc(fit(act, n.w - 32, 12))}</text>
+    ${meta ? `<text class="meta" x="16" y="66">${esc(fit(meta, n.w - 32, 11))}</text>` : ''}
+    ${glyph(glyphKind, 22, 86)}
+    <text class="foot ${cls}" x="34" y="90">${esc(fit(label + (since ? ` · ${since}` : ''), 110, 11))}</text>
+    ${contextBar(v, 212, 86, 56)}
   </g>`;
 }
 
-const TOOL_CLASS = { Bash: 'cat-shell', Read: 'cat-read', Glob: 'cat-read', Grep: 'cat-read', Write: 'cat-write', Edit: 'cat-write', Agent: 'cat-agent', AskUserQuestion: 'cat-ask' };
-
 function agentNode(n, { selected, changed, now }) {
-  const a = n.data;
-  const title = fit(a.description || a.type, n.w - 24, 12.5);
-  const line = a.state === 'running' ? (a.activity?.kind === 'tool' ? `${a.activity.tool}: ${a.activity.label || ''}` : a.activity?.label || 'Running')
-    : a.state === 'done' ? `finished${a.endedAt ? ' ' + agoCoarse(a.endedAt, now) : ''}` : 'ended with session';
+  const a = n.data, cls = AGENT_CLASS[a.state] ?? 'ended';
+  const title = fit(a.description || a.type, n.w - 28, 13);
+  const line = cls === 'running' ? (a.activity?.kind === 'tool' ? `${a.activity.tool}: ${a.activity.label || ''}` : a.activity?.label || 'Running')
+    : cls === 'finished' ? `finished${a.endedAt ? ' · ' + agoCoarse(a.endedAt, now) : ''}` : 'ended with session';
   const kids = a.children ?? 0;
-  const foot = a.toolCalls ? `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}` : String(a.type).split(':').pop();
   const model = shortModelName(a.model || n.sessionModel);
-  const modelW = model ? model.length * 6.4 + 10 : 0;
-  const fy = n.h - 12;
-  return `<g class="node agent ${a.state} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(n.sessionId)}" data-agent="${esc(a.id)}" tabindex="0" role="button" aria-label="${esc(a.description || a.type)}, ${esc(stateLabel(a.state))}">
+  const modelW = model ? model.length * 6.2 + 8 : 0;
+  const foot = a.toolCalls ? `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}` : String(a.type).split(':').pop();
+  return `<g class="node agent ${cls} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(n.sessionId)}" data-agent="${esc(a.id)}" tabindex="0" role="button" aria-label="${esc(a.description || a.type)}, ${esc(AGENT_LABEL[cls])}">
+    ${selected ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : ''}
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
     <rect class="rail" width="4" height="${n.h}"></rect>
     <text class="title" x="14" y="20">${esc(title)}</text>
-    <text class="sub" x="14" y="35">${esc(fit(line, n.w - 24, 11.5))}</text>
-    ${glyph(a.state, 19, fy - 1)}
-    <text class="mono" x="29" y="${fy + 3}">${esc(fit(foot, n.w - 44 - modelW - (kids ? 36 : 0), 11))}</text>
-    ${model ? `<text class="mono model" x="${n.w - 12}" y="${fy + 3}" text-anchor="end">${esc(model)}</text>` : ''}
-    ${kids ? `<text class="mono" x="${n.w - 12 - modelW}" y="${fy + 3}" text-anchor="end">${kids} sub</text>` : ''}
+    <text class="sub" x="14" y="38">${esc(fit(line, n.w - 28, 12))}</text>
+    ${glyph(cls, 19, 51)}
+    <text class="foot ${cls}" x="30" y="55">${esc(fit(foot, n.w - 46 - modelW - (kids ? 30 : 0), 11))}</text>
+    ${kids ? `<text class="count" x="${n.w - 14 - modelW}" y="55" text-anchor="end">⑂${kids}</text>` : ''}
+    ${model ? `<text class="meta" x="${n.w - 14}" y="55" text-anchor="end">${esc(model)}</text>` : ''}
   </g>`;
 }
 
@@ -216,33 +203,34 @@ function moreNode(n) {
   const less = n.kind === 'less';
   return `<g class="node more" transform="translate(${n.x},${n.y})" data-more="${esc(n.id)}" data-less="${less ? '1' : ''}" tabindex="0" role="button">
     <rect class="box" width="${n.w}" height="${n.h}"></rect>
-    <text x="${n.w / 2}" y="20" text-anchor="middle">${less ? 'show less' : `${n.count} more finished · show`}</text>
+    <text x="${n.w / 2}" y="18" text-anchor="middle">${less ? 'show less' : `${n.count} more finished · show`}</text>
   </g>`;
 }
 
+const GROUP_DOT = { needs: 'needs', working: 'working', paused: 'ready', exited: 'ended' };
+
 /**
  * Render into the viewport, touching only what changed: edges/labels are rebuilt when the layout
- * signature changes, and each node <g> is replaced only when its own markup differs. This keeps
- * running animations (spinners, edge flow) from restarting on every refresh and stops the "jump".
+ * signature changes, and each node <g> is replaced only when its own markup differs, so running
+ * animations never restart on a refresh and nothing jumps.
  */
-export function renderScene(scene, { selected, now, changed }, viewport, cache = { sig: '', nodes: new Map() }) {
+export function renderScene(scene, { selected, now, changed, arrived = new Set() }, viewport, cache = { sig: '', nodes: new Map() }) {
   const sig = scene.nodes.map((n) => `${n.kind}:${n.id}:${n.x},${n.y}:${n.kind === 'agent' ? n.data.state : ''}`).join('|') + '#' + scene.labels.map((l) => `${l.x},${l.y},${l.headline},${l.h}`).join('|');
   const nodeHtml = new Map();
   for (const n of scene.nodes) {
-    const html = n.kind === 'session' ? sessionNode(n, { selected: selected?.sessionId === n.id && !selected?.agentId, changed: changed.has(n.id), now })
+    const html = n.kind === 'session' ? sessionNode(n, { selected: selected?.sessionId === n.id && !selected?.agentId, changed: changed.has(n.id), arrived: arrived.has(n.id), now })
       : n.kind === 'agent' ? agentNode(n, { selected: selected?.agentId === n.id, changed: changed.has(n.id), now }) : moreNode(n);
     nodeHtml.set(n.kind + ':' + n.id, html);
   }
   if (sig !== cache.sig) {
     const parts = [];
-    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})"><line class="spine" x1="-16" y1="4" x2="-16" y2="${l.h}"></line><circle class="gdot ${l.state}" cx="2" cy="9" r="4"></circle><text class="group-label" x="14" y="13"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan class="h" dx="10">${esc(fit(l.headline, Math.max(160, l.w - 60 - l.name.length * 7.5), 12))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="13" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
+    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})"><circle class="gdot ${GROUP_DOT[l.worst] ?? ''}" cx="4" cy="10" r="4"></circle><text class="group-label" x="16" y="14"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan dx="12">${esc(fit(l.headline, Math.max(160, l.w - 80 - l.name.length * 7.5), 13))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="14" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
     for (const e of scene.edges) parts.push(busPaths(e));
     parts.push('<g class="nodes">' + [...nodeHtml.values()].join('\n') + '</g>');
     viewport.innerHTML = parts.join('\n');
     cache.sig = sig; cache.nodes = nodeHtml;
     return;
   }
-  // same layout: swap only the nodes whose markup changed, update edge states in place
   const container = viewport.querySelector('.nodes');
   const els = [...container.children];
   let i = 0;
@@ -252,4 +240,3 @@ export function renderScene(scene, { selected, now, changed }, viewport, cache =
   }
   cache.nodes = nodeHtml;
 }
-export { TOOL_CLASS };

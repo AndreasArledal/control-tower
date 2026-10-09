@@ -89,7 +89,7 @@ Claude Code writes everything Radar needs:
 | `.../<session>/subagents/agent-*.jsonl` + `.meta.json` | Each subagent's transcript, description, type, spawn depth, parent tool call |
 | Hooks (optional) | `UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`, `AskUserQuestion` pre/post, `Subagent*`, `Session*` |
 
-The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`, plus a follow-up flag from the summariser's verdict. Terminal focusing is available on the API (`POST /api/session/<id>/focus`, WezTerm/iTerm2/Terminal.app/tmux/kitty, `focusCommand` setting) but not in the UI, since WezTerm cannot switch workspaces from the CLI. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step. The design rationale is in `docs/UI-REVAMP.md`.
+The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`, plus a follow-up flag from the summariser's verdict. Terminal focusing is available on the API (`POST /api/session/<id>/focus`, WezTerm/iTerm2/Terminal.app/tmux/kitty, `focusCommand` setting) but not in the UI, since WezTerm cannot switch workspaces from the CLI. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step. The design system, with the rationale for every surface, is `docs/DESIGN-SYSTEM.md`.
 
 Run the tests with `node --test`.
 

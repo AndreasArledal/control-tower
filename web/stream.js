@@ -1,5 +1,5 @@
 import { esc, ago, clip, plain } from './format.js';
-const TOOL_CLASS = { Bash: 'cat-shell', Read: 'cat-read', Glob: 'cat-read', Grep: 'cat-read', Write: 'cat-write', Edit: 'cat-write', Agent: 'cat-agent', AskUserQuestion: 'cat-ask', Skill: 'cat-agent' };
+const TOOL_CLASS = { Write: 'cat-write', Edit: 'cat-write', Agent: 'cat-agent' };
 
 const ARG_MAX = 900, RESULT_MAX = 1500;
 
@@ -109,7 +109,7 @@ export class StreamView {
 
   setFollow(v, fromScroll = false) {
     this.follow = v;
-    const cb = document.getElementById('follow'); if (cb) cb.checked = v;
+    const cb = document.getElementById('follow'); if (cb) cb.classList.toggle('on', v);
     if (v && !fromScroll) this.scroll.scrollTop = this.scroll.scrollHeight;
   }
   setMode(mode) { if (mode !== this.mode) { this.mode = mode; this.render(); } }

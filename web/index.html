@@ -12,10 +12,9 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <svg class="mark" width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity=".55"/><circle class="mark-dot" cx="16" cy="16" r="2.2"/></svg>
+  <div class="brand" id="brand" title="Connecting">
+    <svg class="mark" width="18" height="18" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2.2" opacity=".5"/><circle class="mark-dot" id="live-dot" cx="16" cy="16" r="3"/></svg>
     <span class="brand-name">Radar</span>
-    <span class="live-dot" id="live-dot" title="Connecting"></span>
   </div>
   <div class="status" id="status" aria-live="polite"></div>
   <div class="topbar-right">
@@ -30,7 +29,6 @@
 <main class="canvas-wrap" id="canvas-wrap">
   <svg id="graph" class="graph" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
   <div class="canvas-tools">
-    <label class="toggle"><input type="checkbox" id="show-exited"> ended</label>
     <button class="tool" id="zoom-out" title="Zoom out (-)">−</button>
     <button class="tool" id="zoom-in" title="Zoom in (+)">+</button>
     <button class="tool" id="fit-btn" title="Fit to view (f)">fit</button>
@@ -47,14 +45,15 @@
       <button class="seg-btn on" data-mode="story" role="tab" title="Prompts, replies, and the work in between as one line per step">Story</button>
       <button class="seg-btn" data-mode="raw" role="tab" title="Every transcript entry (r)">Raw</button>
     </div>
-    <button class="filter" id="thinking-toggle" title="Show Claude's thinking (t)">thinking</button>
-    <label class="toggle follow" title="Follow the newest entries (f)"><input type="checkbox" id="follow" checked> follow</label>
+    <button class="chip" id="thinking-toggle" title="Show Claude's thinking (t)">thinking</button>
+    <button class="chip on right" id="follow" title="Follow the newest entries (Shift+F)">follow</button>
   </div>
   <div class="stream" id="stream"><button class="link" id="load-earlier" hidden>Load earlier</button><div id="stream-list"></div></div>
 </aside>
 
 <div class="popover" id="attention-pop" hidden></div>
 <div class="popover settings" id="settings-pop" hidden>
+  <div class="pop-head"><span>Settings</span><button class="icon-btn" id="settings-close" aria-label="Close"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
   <label>Summaries
     <select id="summaries-mode">
       <option value="auto">automatic</option>
@@ -71,8 +70,8 @@
     </select>
   </label>
   <p class="hint" id="spend">Written by Haiku through your own claude login.</p>
-  <div id="hooks-row"></div>
-  <p class="hint">Keys: <kbd>n</kbd> next that needs you · <kbd>f</kbd> fit · <kbd>Esc</kbd> close · <kbd>r</kbd> raw · <kbd>t</kbd> thinking</p>
+  <p class="hint" id="hooks-row"></p>
+  <div class="keys"><span><kbd>n</kbd>next needs you</span><span><kbd>f</kbd>fit</span><span><kbd>e</kbd>ended</span><span><kbd>t</kbd>thinking</span><span><kbd>r</kbd>raw</span><span><kbd>1</kbd>–<kbd>9</kbd> project</span><span><kbd>0</kbd>Active</span><span><kbd>Esc</kbd>close</span></div>
 </div>
 
 <div class="toasts" id="toasts"></div>
