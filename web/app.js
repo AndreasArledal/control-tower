@@ -253,10 +253,20 @@ function selectFromHash() {
   return true;
 }
 
+/** Open a session from a notification. Only moves the canvas if the node is not already in view. */
 function focusSession(id) {
   const v = state.snap?.sessions.find((s) => s.id === id); if (!v) return;
-  if (!visibleProjects().has(v.cwd)) { state.mode = 'pick'; state.selectedProjects = new Set([v.cwd]); renderRail(state.snap); }
-  open(id, null); centerOn(id);
+  let moved = false;
+  if (!visibleProjects().has(v.cwd)) { state.mode = 'pick'; state.selectedProjects = new Set([v.cwd]); renderRail(state.snap); moved = true; }
+  open(id, null);
+  if (moved || !nodeInView(id)) centerOn(id);
+}
+
+function nodeInView(id) {
+  const n = state.scene?.nodes.find((x) => x.kind === 'session' && x.id === id); if (!n) return false;
+  const wrap = $('canvas-wrap'), W = wrap.clientWidth - ($('drawer').hidden ? 0 : $('drawer').offsetWidth), H = wrap.clientHeight;
+  const x = n.x * state.zoom + state.pan.x, y = n.y * state.zoom + state.pan.y;
+  return x >= 0 && y >= 0 && x + n.w * state.zoom <= W && y + n.h * state.zoom <= H;
 }
 
 function renderDrawer() {
