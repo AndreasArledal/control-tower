@@ -55,7 +55,7 @@ export function buildScene(snapshot, selectedProjects, { expanded, showExited, o
   let y = 24;
   const multi = groups.length > 1;
   for (const p of groups) {
-    const sessions = snapshot.sessions.filter((v) => v.cwd === p.id && (v.alive || showExited || openedHistory.has(v.id)));
+    const sessions = snapshot.sessions.filter((v) => v.cwd === p.id && (v.alive || v.pinned || showExited || openedHistory.has(v.id)));
     if (!sessions.length) continue;
     if (multi) { labels.push({ x: 24, y: y + 4, name: p.name, path: p.path, n: sessions.length }); y += 28; }
     const rank = { question: 0, permission: 0, done: 1, working: 2, idle: 3, exited: 4 };

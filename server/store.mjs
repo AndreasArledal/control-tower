@@ -37,7 +37,7 @@ class SessionRecord {
     this.transcriptPath = null; this.tailer = null; this.model = new SessionModel(); this.entries = []; this.seq = 0;
     this.hooks = emptyHookState(); this.hooksSeen = false; this.attentionCount = null; this.agents = new Map(); this.agentsScanAt = 0;
     this.summary = null; this.summaryKey = null; this.summaryError = null; this.ackedAt = null; this.loaded = false; this.lastState = null;
-    this.summarizedForState = null;
+    this.summarizedForState = null; this.pinned = false;
   }
 }
 
@@ -249,7 +249,7 @@ export class RadarStore extends EventEmitter {
       lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
       lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
       contextTokens: m.contextTokens, outputTokens: m.outputTokens, model: m.model, thinkingChars: m.thinkingChars, entryCount: s.entries.length,
-      hooksSeen: s.hooksSeen, summary: s.summary, summaryError: s.summaryError, summarizing: Boolean(this.summarizer?.isQueued(s.id)),
+      hooksSeen: s.hooksSeen, pinned: s.pinned, summary: s.summary, summaryError: s.summaryError, summarizing: Boolean(this.summarizer?.isQueued(s.id)),
       agents, runningAgents: agents.filter((a) => a.state === 'running').length,
     };
   }
@@ -374,7 +374,7 @@ export class RadarStore extends EventEmitter {
   async openHistory(cwd, id) {
     if (this.sessions.has(id)) return this.sessions.get(id);
     const s = this._session(id);
-    s.cwd = cwd; s.transcriptPath = transcriptPathFor(this.home, cwd, id); s.alive = false; s.lastSeenAliveAt = this._now();
+    s.cwd = cwd; s.transcriptPath = transcriptPathFor(this.home, cwd, id); s.alive = false; s.lastSeenAliveAt = this._now(); s.pinned = true;
     await this._pollTranscript(s); await this._pollAgents(s); s.loaded = true;
     this._version = '';
     return s;
