@@ -37,7 +37,7 @@ function subscribe() {
 
 function onSnapshot(s) {
   snap = s;
-  const needs = s.attention.length;
+  const needs = s.unseen ?? s.attention.length;
   const working = s.sessions.filter((v) => v.state === 'working').length;
   const agents = s.sessions.reduce((n, v) => n + v.runningAgents, 0);
   tray.setTitle(needs ? ` ${needs} need${needs === 1 ? 's' : ''} you` : working ? ` ${working}${agents ? `+${agents}` : ''}` : '');
@@ -48,8 +48,8 @@ function onSnapshot(s) {
 function buildMenu() {
   const items = [{ label: 'Open Radar', click: () => showWindow() }, { type: 'separator' }];
   if (snap?.attention.length) {
-    for (const a of snap.attention) items.push({ label: `${a.state === 'done' ? '✓' : '?'}  ${a.projectName}: ${a.title.slice(0, 60)}`, click: () => showWindow(`#session=${encodeURIComponent(a.sessionId)}`) });
-    items.push({ label: 'Mark all as seen', click: () => post('/api/ack-all') }, { type: 'separator' });
+    for (const a of snap.attention) items.push({ label: `${a.seen ? '   ' : '●  '}${a.state === 'done' ? '✓' : '?'}  ${a.projectName}: ${a.title.slice(0, 60)}`, click: () => { post(`/api/session/${encodeURIComponent(a.sessionId)}/seen`); showWindow(`#session=${encodeURIComponent(a.sessionId)}`); } });
+    items.push({ type: 'separator' });
   } else if (snap) {
     for (const v of snap.sessions.filter((x) => x.alive).slice(0, 8)) items.push({ label: `${v.state === 'working' ? '●' : '○'}  ${path.basename(v.cwd)}: ${v.title.slice(0, 60)}`, click: () => showWindow(`#session=${encodeURIComponent(v.id)}`) });
     items.push({ type: 'separator' });

@@ -37,7 +37,7 @@ function onSnapshot(snap) {
   state.snap = snap;
   for (const v of snap.sessions) { const byId = new Map(v.agents.map((a) => [a.id, 0])); for (const a of v.agents) if (a.parentAgentId && byId.has(a.parentAgentId)) byId.set(a.parentAgentId, byId.get(a.parentAgentId) + 1); for (const a of v.agents) a.children = byId.get(a.id) ?? 0; }
   renderStatus(snap);
-  document.title = (snap.attention.length ? `(${snap.attention.length}) ` : '') + 'Claude Radar';
+  document.title = (snap.unseen ? `(${snap.unseen}) ` : '') + 'Claude Radar';
   $('summaries-mode').value = snap.summaries.mode;
   renderBadge(snap); renderHooksRow(snap); detectTransitions(snap);
   if (!state.hashApplied) { state.hashApplied = true; selectFromHash(); }
@@ -52,7 +52,7 @@ function detectTransitions(snap) {
     state.lastStates.set(v.id, v.state);
     if (prev === undefined || prev === v.state) continue;
     state.changedAt.set(v.id, now);
-    if (v.needsYou) toast(v); else dismissToast(v.id);
+    if (v.needsYou && !snap.attention.find((a) => a.sessionId === v.id)?.seen) toast(v); else dismissToast(v.id);
   }
   for (const v of snap.sessions) for (const a of v.agents) {
     const k = 'a:' + a.id, prev = state.lastStates.get(k);
@@ -75,8 +75,10 @@ function renderStatus(snap) {
   $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
 }
 
+function markSeen(id) { const a = state.snap?.attention.find((x) => x.sessionId === id); if (a && !a.seen) { a.seen = true; post(`/api/session/${encodeURIComponent(id)}/seen`); renderBadge(state.snap); dismissToast(id); } }
+
 function renderBadge(snap) {
-  const n = snap.attention.length, b = $('attention-badge');
+  const n = snap.attention.filter((a) => !a.seen).length, b = $('attention-badge');
   $('attention-count').textContent = n;
   b.hidden = n === 0;
   if (state.prevAttention != null && n > state.prevAttention) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); }
@@ -87,7 +89,7 @@ function renderBadge(snap) {
 function renderAttentionPop() {
   const snap = state.snap, now = Date.now();
   $('attention-pop').innerHTML = snap.attention.map((a) => `
-    <button class="att-item ${a.state}" data-focus="${esc(a.sessionId)}">
+    <button class="att-item ${a.state} ${a.seen ? 'seen' : ''}" data-focus="${esc(a.sessionId)}">
       <div class="t"><span>${esc(a.projectName)} · ${esc(stateLabel(a.state))}</span><span class="age">${ago(a.since, now)}</span></div>
       <div class="m">${esc(a.title)}${a.message ? ' — ' + esc(plain(a.message)) : ''}</div>
     </button>`).join('') || '<p class="hint" style="padding:8px">Nothing needs you right now.</p>';
@@ -214,6 +216,7 @@ function activate(node) {
 /* ---------- drawer ---------- */
 function open(sessionId, agentId = null) {
   state.selected = { sessionId, agentId };
+  markSeen(sessionId);
   const h = `#session=${encodeURIComponent(sessionId)}${agentId ? '&agent=' + encodeURIComponent(agentId) : ''}`;
   if (location.hash !== h) history.replaceState(null, '', location.pathname + h);
   $('drawer').hidden = false;
@@ -337,7 +340,7 @@ function toast(v) {
   el.className = `toast ${v.state}`;
   const msg = v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn', 120) : plain(v.stateMessage || activityLine(v));
   el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} ${esc(stateLabel(v.state))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
-  el.addEventListener('click', (e) => { if (!e.target.classList.contains('x')) focusSession(v.id); dismissToast(v.id); });
+  el.addEventListener('click', (e) => { if (!e.target.classList.contains('x')) focusSession(v.id); markSeen(v.id); dismissToast(v.id); });
   $('toasts').appendChild(el);
   state.toasts.set(v.id, el);
   while ($('toasts').children.length > 3) $('toasts').firstChild.remove();
@@ -374,7 +377,7 @@ function setupUI() {
       state.mode = 'pick';
       if (state.selectedProjects.has(id)) state.selectedProjects.delete(id); else state.selectedProjects.add(id);
       if (!state.selectedProjects.size) state.mode = 'active';
-    } else { state.mode = 'pick'; state.selectedProjects = new Set([id]); }
+    } else { state.mode = 'pick'; state.selectedProjects = new Set([id]); for (const a of state.snap.attention) if (state.snap.sessions.find((v) => v.id === a.sessionId)?.cwd === id) markSeen(a.sessionId); }
     try { localStorage.setItem('radar.mode', state.mode); } catch { /* optional */ }
     renderRail(state.snap); renderGraph(); fitView();
   });

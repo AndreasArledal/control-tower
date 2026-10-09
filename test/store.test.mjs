@@ -60,7 +60,13 @@ test('store builds projects, sessions, agents and reacts to hook events', async 
   snap = store.snapshot();
   assert.equal(snap.sessions[0].state, 'done');
   assert.equal(snap.attention.length, 1);
+  assert.equal(snap.unseen, 1);
   assert.equal(snap.hooksSeen, true);
+  store.markSeen(sid);
+  snap = store.snapshot();
+  assert.equal(snap.sessions[0].state, 'done', 'seen does not change the state');
+  assert.equal(snap.attention[0].seen, true);
+  assert.equal(snap.unseen, 0);
 
   // a new prompt makes it working again
   appendFileSync(transcript, L({ ...base(sid, 15), type: 'user', message: { role: 'user', content: 'Now test it' }, origin: { kind: 'human' } }));

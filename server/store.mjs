@@ -56,6 +56,7 @@ export class RadarStore extends EventEmitter {
     this.spoolDir = join(radarDir(home), 'events');
     this.stateFile = join(radarDir(home), 'state.json');
     this.projectSummaries = new Map(); // cwd -> { headline, at, key }
+    this.seen = new Map(); // sessionId -> stateSince the user has looked at
     this._now = () => Date.now();
     this._timer = null; this._version = ''; this.hooksSeen = false; this.ticking = false; this.lastTickAt = null;
   }
@@ -284,11 +285,12 @@ export class RadarStore extends EventEmitter {
     }
     const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
     const attention = sessions.filter((v) => v.needsYou).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
-      .map((v) => ({ sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: v.state, since: v.stateSince, message: v.stateMessage ?? (v.state === 'done' ? clip(v.lastAssistantText, 200) : null) }));
+      .map((v) => ({ sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: v.state, since: v.stateSince, message: v.stateMessage ?? (v.state === 'done' ? clip(v.lastAssistantText, 200) : null), seen: (this.seen.get(v.id) ?? -1) >= (v.stateSince ?? 0) }));
+    const unseen = attention.filter((a) => !a.seen).length;
     return {
       generatedAt: this._now(), hooksSeen: this.hooksSeen, hooksInstalled: this.hooksInstalled(),
       summaries: { mode: this.settings.summaries, available: this.summarizer ? this.summarizer.available : false, lastError: this.summarizer?.lastError ?? null },
-      projects, sessions, attention,
+      projects, sessions, attention, unseen,
     };
   }
 
@@ -351,6 +353,14 @@ export class RadarStore extends EventEmitter {
     s.summaryError = err.message; this._version = ''; this.emit('change', this.snapshot());
   }
 
+  /** The user has looked at this session's current attention state; it leaves the badge until the state changes again. */
+  markSeen(id) {
+    const s = this.sessions.get(id); if (!s) return false;
+    const v = this._sessionView(s);
+    this.seen.set(id, v.stateSince ?? this._now()); this._version = ''; this._saveState();
+    return true;
+  }
+
   /** Bring the terminal running this session to the front (best effort, see focus.mjs). */
   focus(id) {
     const s = this.sessions.get(id);
@@ -408,11 +418,13 @@ export class RadarStore extends EventEmitter {
     try {
       const st = JSON.parse(await readFile(this.stateFile, 'utf8'));
       if (st.settings) this.settings = { ...this.settings, ...st.settings };
+      for (const [id, at] of Object.entries(st.seen ?? {})) this.seen.set(id, at);
     } catch { /* first run */ }
   }
 
   async _saveState() {
-    try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings })); } catch { /* best effort */ }
+    const seen = Object.fromEntries([...this.seen].slice(-200));
+    try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings, seen })); } catch { /* best effort */ }
   }
 }
 

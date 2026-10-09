@@ -12,7 +12,7 @@ function fakeStore() {
   s.snapshot = () => ({ projects: [], sessions: [{ id: 'a' }], attention: [] });
   s.timeline = (id) => (id === 'a' ? { total: 1, entries: [{ kind: 'prompt', text: 'hi' }], hasMore: false } : null);
   s.requested = [];
-  s.requestSummary = (id) => { s.requested.push(id); return true; }; s.setSettings = (p) => { s.settings = p; }; s.settings = {};
+  s.requestSummary = (id) => { s.requested.push(id); return true; }; s.seen = []; s.markSeen = (id) => { s.seen.push(id); return true; }; s.setSettings = (p) => { s.settings = p; }; s.settings = {};
   return s;
 }
 
@@ -29,6 +29,8 @@ test('serves the page, state, timeline and queues summaries', async () => {
   assert.equal((await fetch(base + '/api/timeline?session=zzz')).status, 404);
   assert.equal((await fetch(base + '/api/session/a/summarize', { method: 'POST' })).status, 200);
   assert.deepEqual(store.requested, ['a']);
+  assert.equal((await fetch(base + '/api/session/a/seen', { method: 'POST' })).status, 200);
+  assert.deepEqual(store.seen, ['a']);
   assert.equal((await fetch(base + '/../etc/passwd')).status, 404);
   server.closeAllConnections?.(); server.close();
 });
