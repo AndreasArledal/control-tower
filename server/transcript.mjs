@@ -14,7 +14,9 @@ function blockText(content) {
 }
 
 function entryBase(line, i, kind) {
-  return { i, ts: ts(line), kind, uuid: line.uuid ?? null, parentUuid: line.parentUuid ?? null, agentId: line.agentId ?? null };
+  const e = { i, ts: ts(line), kind, uuid: line.uuid ?? null, parentUuid: line.parentUuid ?? null, agentId: line.agentId ?? null };
+  if (typeof line.effort === 'string') e.effort = line.effort;
+  return e;
 }
 
 /**

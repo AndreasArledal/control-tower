@@ -8,19 +8,24 @@ export const SUMMARY_SCHEMA = {
   type: 'object',
   properties: {
     headline: { type: 'string', description: 'At most 10 words, present tense, what the session is doing or just did' },
-    progress: { type: 'string', description: 'At most two sentences: what has been done and where it stands' },
-    needs: { type: 'string', description: 'One sentence on what the user must do now, or empty string' },
+    goal: { type: 'string', description: 'One sentence: what the user ultimately wants from this session' },
+    done: { type: 'array', items: { type: 'string' }, description: 'Up to 5 short bullets of what has been accomplished so far, most recent last' },
+    now: { type: 'string', description: 'One sentence: what is happening right now, or what it ended with' },
+    next: { type: 'string', description: 'One sentence: what comes next, or what the user must decide or provide; empty if nothing' },
+    progress: { type: 'string', description: 'For project digests only: leave empty' },
+    needs: { type: 'string', description: 'Leave empty' },
   },
-  required: ['headline', 'progress', 'needs'],
+  required: ['headline', 'goal', 'done', 'now', 'next'],
 };
 
-export const SYSTEM_PROMPT = 'You write terse status-board summaries of AI coding sessions for the engineer who runs them. Use plain, specific language. Never mention that you are summarizing. Answer only with the requested JSON.';
+export const SYSTEM_PROMPT = 'You write status-board summaries of AI coding sessions for the engineer who runs them, who has several running at once and wants to know what is going on and how far along each one is. Be concrete: name files, features, decisions, numbers. Plain language, no filler, never mention that you are summarizing. Answer only with the requested JSON.';
 
 /** Compact, bounded text digest of one session for the summarizer model. */
 export function buildDigest(view, entries, agentEntries = []) {
-  const prompts = entries.filter((e) => e.kind === 'prompt').slice(-3).map((e) => '- ' + clip(e.text, 300));
-  const tools = entries.filter((e) => e.kind === 'tool_use').slice(-12).map((e) => `- ${e.tool.name}: ${clip(toolLabel(e.tool.name, e.tool.input), 100)}`);
-  const agents = (view.agents ?? []).map((a) => `- ${clip(a.description || a.type || a.id, 100)} (${a.type ?? 'agent'}, ${a.state})`);
+  const prompts = entries.filter((e) => e.kind === 'prompt').slice(-5).map((e) => '- ' + clip(e.text, 400));
+  const replies = entries.filter((e) => e.kind === 'text' && e.text?.trim()).slice(-3).map((e) => '- ' + clip(e.text, 700));
+  const tools = entries.filter((e) => e.kind === 'tool_use').slice(-20).map((e) => `- ${e.tool.name}: ${clip(toolLabel(e.tool.name, e.tool.input), 110)}`);
+  const agents = (view.agents ?? []).map((a) => `- ${clip(a.description || a.type || a.id, 100)} (${a.type ?? 'agent'}, ${a.state})${a.lastText ? ': ' + clip(a.lastText, 200) : ''}`);
   const parts = [
     `Title: ${clip(view.title, 120)}`,
     `Directory: ${view.cwd}`,
@@ -28,7 +33,8 @@ export function buildDigest(view, entries, agentEntries = []) {
     `Turns: ${view.turns}, tool calls: ${view.toolCalls}`,
     `First request from the user:\n${clip(view.firstPrompt, 600)}`,
     prompts.length ? `Most recent requests from the user:\n${prompts.join('\n')}` : '',
-    view.lastAssistantText ? `Most recent reply from the assistant:\n${clip(view.lastAssistantText, 1200)}` : '',
+    replies.length ? `Most recent replies from the assistant (oldest first):\n${replies.join('\n')}` : '',
+    view.activity?.label ? `Right now: ${view.activity.kind === 'tool' ? view.activity.tool + ' — ' : ''}${clip(view.activity.label, 160)}` : '',
     tools.length ? `Recent tool calls:\n${tools.join('\n')}` : '',
     agents.length ? `Subagents:\n${agents.join('\n')}` : '',
   ].filter(Boolean);
@@ -38,7 +44,7 @@ export function buildDigest(view, entries, agentEntries = []) {
 /** Digest for a whole project: what its live sessions are up to. */
 export function buildProjectDigest(project, sessions) {
   const lines = sessions.map((v) => `- ${clip(v.title, 100)} (${v.state})${v.summary?.headline ? ': ' + clip(v.summary.headline, 120) : v.lastPrompt ? ': ' + clip(v.lastPrompt, 160) : ''}`);
-  return `Project directory: ${project.path}\nSessions in it:\n${lines.join('\n')}\n\nIn the headline, say in at most 10 words what this project is working on overall. Leave progress and needs empty.`;
+  return `Project directory: ${project.path}\nSessions in it:\n${lines.join('\n')}\n\nIn the headline, say in at most 10 words what this project is working on overall. Put one sentence in goal; leave done empty, now and next empty.`;
 }
 
 export function parseSummary(out) {
@@ -48,7 +54,9 @@ export function parseSummary(out) {
     try { obj = JSON.parse(out.result); } catch { return null; }
   }
   if (!obj || typeof obj.headline !== 'string') return null;
-  return { headline: obj.headline.trim(), progress: String(obj.progress ?? '').trim(), needs: String(obj.needs ?? '').trim() };
+  const str = (k) => String(obj[k] ?? '').trim();
+  const done = Array.isArray(obj.done) ? obj.done.map((d) => String(d).trim()).filter(Boolean).slice(0, 6) : [];
+  return { headline: obj.headline.trim(), goal: str('goal'), done, now: str('now'), next: str('next') || str('needs'), progress: str('progress') };
 }
 
 /** Strip the variables Claude Code sets inside a session so the summarizer runs as a plain child. */
@@ -88,17 +96,22 @@ export class Summarizer {
     this.cache = new Map(); // key -> summary
     this.queue = []; this.queued = new Set(); this.running = null; this.waiters = [];
     this.lastRunAt = new Map(); this.lastError = null; this.available = true;
+    this.spend = { count: 0, usd: 0, today: '', todayCount: 0, todayUsd: 0 };
   }
 
   async load() {
     if (!this.cacheFile) return;
-    try { for (const [k, v] of Object.entries(JSON.parse(await readFile(this.cacheFile, 'utf8')))) this.cache.set(k, v); } catch { /* fresh */ }
+    try {
+      const raw = JSON.parse(await readFile(this.cacheFile, 'utf8'));
+      if (raw.__spend) this.spend = { ...this.spend, ...raw.__spend };
+      for (const [k, v] of Object.entries(raw)) if (k !== '__spend') this.cache.set(k, v);
+    } catch { /* fresh */ }
   }
 
   async persist() {
     if (!this.cacheFile) return;
     const entries = [...this.cache.entries()].slice(-500);
-    try { await writeFile(this.cacheFile, JSON.stringify(Object.fromEntries(entries))); } catch { /* best effort */ }
+    try { await writeFile(this.cacheFile, JSON.stringify({ __spend: this.spend, ...Object.fromEntries(entries) })); } catch { /* best effort */ }
   }
 
   cached(key) { return this.cache.get(key) ?? null; }
@@ -113,6 +126,14 @@ export class Summarizer {
     return true;
   }
 
+  /** Running total of what summaries have cost, from claude's own accounting. */
+  recordSpend(out) {
+    const usd = Number(out?.total_cost_usd) || 0;
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.spend.today !== today) { this.spend.today = today; this.spend.todayCount = 0; this.spend.todayUsd = 0; }
+    this.spend.count++; this.spend.usd += usd; this.spend.todayCount++; this.spend.todayUsd += usd;
+  }
+
   idle() { return this.running || this.queue.length ? new Promise((r) => this.waiters.push(r)) : Promise.resolve(); }
 
   async _pump() {
@@ -122,6 +143,7 @@ export class Summarizer {
     try {
       const prompt = `Session digest:\n\n${job.digestFn()}\n\nWrite the JSON status summary.`;
       const out = await this.runner(prompt, this.runOptions);
+      this.recordSpend(out);
       const sum = parseSummary(out);
       if (!sum) throw new Error(out?.result ? String(out.result).slice(0, 200) : 'empty summary');
       const stamped = { ...sum, at: Date.now() };

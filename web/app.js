@@ -1,4 +1,5 @@
 import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain } from './format.js';
+import { renderMarkdown } from './stream.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView } from './stream.js';
 
@@ -16,7 +17,7 @@ const ICON = {
 
 const state = {
   snap: null, mode: 'active', selectedProjects: new Set(), selected: null, expanded: new Set(), showExited: false,
-  zoom: 1, pan: { x: 0, y: 0 }, lastStates: new Map(), changedAt: new Map(), toasts: new Map(), prevAttention: null, hashApplied: false, scene: null,
+  zoom: 1, pan: { x: 0, y: 0 }, lastStates: new Map(), changedAt: new Map(), toasts: new Map(), prevAttention: null, hashApplied: false, scene: null, renderCache: { sig: '', nodes: new Map() }, transcriptOpen: false, drawerView: 'summary',
 };
 
 const stream = new StreamView({ listEl: $('stream-list'), scrollEl: $('stream'), earlierBtn: $('load-earlier'), api, onOpenAgent: (agentId) => open(state.selected.sessionId, agentId) });
@@ -39,6 +40,9 @@ function onSnapshot(snap) {
   renderStatus(snap);
   document.title = (snap.unseen ? `(${snap.unseen}) ` : '') + 'Claude Radar';
   $('summaries-mode').value = snap.summaries.mode;
+  $('summaries-refresh').value = String(snap.summaries.refreshMinutes ?? 4);
+  const sp = snap.summaries.spend;
+  $('spend').textContent = sp && sp.count ? `Haiku via your claude login. Today: ${sp.todayCount} summar${sp.todayCount === 1 ? 'y' : 'ies'}, $${sp.todayUsd.toFixed(3)} · all time: ${sp.count}, $${sp.usd.toFixed(2)}.` : 'Written by Haiku through your own claude login, about a fifth of a cent each.';
   renderBadge(snap); renderHooksRow(snap); detectTransitions(snap);
   if (!state.hashApplied) { state.hashApplied = true; selectFromHash(); }
   renderRail(snap); renderGraph(); if (state.selected) renderDrawer();
@@ -126,10 +130,9 @@ function renderGraph() {
   const snap = state.snap; if (!snap) return;
   const now = Date.now();
   const changed = new Set([...state.changedAt].filter(([, t]) => now - t < 1500).map(([id]) => id));
-  const wrap = $('canvas-wrap');
-  const scene = buildScene(snap, visibleProjects(snap), { expanded: state.expanded, showExited: state.showExited, availWidth: Math.max(600, wrap.clientWidth - ($('drawer').hidden ? 0 : $('drawer').offsetWidth)) });
+  const scene = buildScene(snap, visibleProjects(snap), { expanded: state.expanded, showExited: state.showExited });
   state.scene = scene;
-  $('viewport').innerHTML = renderScene(scene, { selected: state.selected, now, changed });
+  renderScene(scene, { selected: state.selected, now, changed }, $('viewport'), state.renderCache);
   applyTransform();
   const empty = $('empty');
   if (!snap.sessions.some((s) => s.alive || s.pinned)) {
@@ -145,8 +148,8 @@ function applyTransform() { $('viewport').setAttribute('transform', `translate($
 
 function fitView(animate = true) {
   const scene = state.scene; if (!scene?.nodes.length) return;
-  const wrap = $('canvas-wrap'), drawerW = $('drawer').hidden ? 0 : $('drawer').offsetWidth;
-  const W = wrap.clientWidth - drawerW, H = wrap.clientHeight;
+  const wrap = $('canvas-wrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
   const z = Math.min(1.15, Math.max(0.5, Math.min((W - 32) / scene.width, (H - 48) / scene.height)));
   animateTo({ zoom: z, pan: { x: 12, y: 12 } }, animate ? 200 : 0);
 }
@@ -216,7 +219,7 @@ function activate(node) {
 
 /* ---------- drawer ---------- */
 function open(sessionId, agentId = null) {
-  state.selected = { sessionId, agentId };
+  state.selected = { sessionId, agentId }; state.drawerView = 'summary';
   markSeen(sessionId);
   const h = `#session=${encodeURIComponent(sessionId)}${agentId ? '&agent=' + encodeURIComponent(agentId) : ''}`;
   if (location.hash !== h) history.replaceState(null, '', location.pathname + h);
@@ -248,6 +251,7 @@ function focusSession(id) {
 
 function renderDrawer() {
   const snap = state.snap, sel = state.selected; if (!sel) return;
+  if (state.drawerView === 'history') return; // the recent-sessions list stays until the user leaves it
   const v = snap.sessions.find((s) => s.id === sel.sessionId);
   if (!v) { close(); return; }
   const a = sel.agentId ? v.agents.find((x) => x.id === sel.agentId) : null;
@@ -255,7 +259,7 @@ function renderDrawer() {
   const now = Date.now();
   stream.setAgentIndex(v.agents);
   if (a) renderAgentHead(v, a, now); else renderSessionHead(v, now);
-  stream.open(v.id, a ? a.id : null);
+  if (state.transcriptOpen) stream.open(v.id, a ? a.id : null);
 }
 
 function iconBtn(act, icon, title) { return `<button class="icon-btn" data-act="${act}" title="${esc(title)}" aria-label="${esc(title)}">${ICON[icon]}</button>`; }
@@ -264,68 +268,87 @@ function actBtn(act, icon, label, title = label) { return `<button class="act" d
 function renderSessionHead(v, now) {
   const resume = `cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`;
   const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
-  const stats = [[tokens(v.contextTokens), 'context'], [String(v.turns), v.turns === 1 ? 'turn' : 'turns'], [String(v.toolCalls), 'tool calls'], v.agents.length ? [String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents'] : null, [shortModelName(v.model) || '–', v.startedAt ? duration(now - v.startedAt) : 'model']].filter(Boolean);
+  const stats = [[`${Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000)))}%`, 'context used'], [String(v.turns), v.turns === 1 ? 'turn' : 'turns'], [String(v.toolCalls), 'tool calls'], v.agents.length ? [String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents'] : null, [shortModelName(v.model) || '–', v.effort ? `${v.effort} effort` : 'model'], v.startedAt ? [duration(now - v.startedAt), 'running'] : null].filter(Boolean);
   const errors = v.errors ? `<span class="stat err"><b>${v.errors}</b>${v.errors === 1 ? 'error' : 'errors'}</span>` : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
     <div class="meta"><span class="pill ${v.state}">${esc(stateLabel(v.state))}${v.stateSince ? ' · ' + ago(v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
-    ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : v.state === 'working' ? `<div class="now">${esc(plain(activityLine(v)))}</div>` : ''}
-    <div class="acts">
-      ${v.alive ? actBtn('focus', 'terminal', 'Terminal', 'Jump to the terminal pane running this session') : ''}
-      ${actBtn('copy', 'copy', 'Resume', 'Copy: cd … && claude --resume …')}
-      ${actBtn('history', 'history', 'Recent', 'Recent sessions in this project')}
-    </div>
+    ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : ''}
     <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}${errors}</div>`;
   const s = v.summary;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
-  const refresh = state.snap.summaries.mode === 'off' ? '' : `<button class="link" data-act="summarize">${v.summarizing ? 'writing…' : (s ? 'refresh' : 'write one now')}</button>`;
-  sumEl.innerHTML = s ? `<div class="headline">${esc(s.headline)}</div>${s.progress ? `<div class="progress">${esc(s.progress)}</div>` : ''}${s.needs ? `<div class="needs"><span class="lbl">Next</span>${esc(s.needs)}</div>` : ''}<div class="when">summary from ${ago(s.at, now)} ago ${refresh}</div>`
-    : state.snap.summaries.mode === 'off' ? `<div class="progress">Summaries are off. Turn them on in settings to get a few lines on where this session stands.</div>`
-    : v.summaryError ? `<div class="progress">Summary failed: ${esc(v.summaryError)} ${refresh}</div>` : v.summarizing ? '<div class="progress">Writing a summary…</div>'
-    : (v.lastPrompt ? `<div class="progress"><span class="lbl">Latest request</span>${esc(clip(plain(v.lastPrompt), 240))}</div><div class="when">no summary yet ${refresh}</div>` : '<div class="progress">No prompt yet.</div>');
+  const mode = state.snap.summaries.mode;
+  const refresh = mode === 'off' ? '' : `<button class="link" data-act="summarize">${v.summarizing ? 'writing…' : (s ? 'refresh' : 'write one now')}</button>`;
+  const agentsBlock = v.agents.length ? `<section class="sec"><h3>Agents <span class="muted">${v.runningAgents ? `${v.runningAgents} running of ` : ''}${v.agents.length}</span></h3><ul class="agents">${v.agents.slice().sort((a, b) => (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || (b.startedAt ?? 0) - (a.startedAt ?? 0)).slice(0, 8).map((a) => `<li><button data-agent="${esc(a.id)}"><span class="dot ${a.state}"></span><span class="t">${esc(a.description || a.type)}</span><span class="m">${esc(a.state === 'running' ? plain(activityLine({ state: 'working', activity: a.activity })) : clip(plain(a.lastText) || 'finished', 110))}</span></button></li>`).join('')}${v.agents.length > 8 ? `<li class="muted">+${v.agents.length - 8} more in the graph</li>` : ''}</ul></section>` : '';
+  const live = v.state === 'working' ? `<section class="sec now"><h3>Activity</h3><p>${esc(plain(activityLine(v)))}</p></section>` : '';
+  if (s) {
+    sumEl.innerHTML = `
+      <div class="headline">${esc(s.headline)}</div>
+      ${s.goal ? `<section class="sec"><h3>Goal</h3><p>${esc(s.goal)}</p></section>` : ''}
+      ${s.done?.length ? `<section class="sec"><h3>Done so far</h3><ul class="done">${s.done.map((d) => `<li>${esc(d)}</li>`).join('')}</ul></section>` : s.progress ? `<section class="sec"><h3>So far</h3><p>${esc(s.progress)}</p></section>` : ''}
+      ${s.now ? `<section class="sec"><h3>${v.state === 'working' ? 'Now' : 'Ended with'}</h3><p>${esc(s.now)}</p></section>` : ''}
+      ${live}
+      ${s.next ? `<section class="sec next ${v.needsYou ? 'attn' : ''}"><h3>${v.needsYou ? 'Needs you' : 'Next'}</h3><p>${esc(s.next)}</p></section>` : ''}
+      ${agentsBlock}
+      <div class="when">summary from ${ago(s.at, now)} ago${v.summarizing ? ' · updating…' : ''} ${refresh}</div>`;
+  } else {
+    sumEl.innerHTML = `
+      ${v.lastPrompt ? `<section class="sec"><h3>Latest request</h3><p>${esc(clip(plain(v.lastPrompt), 300))}</p></section>` : '<p class="muted">No prompt yet.</p>'}
+      ${v.lastAssistantText ? `<section class="sec"><h3>Latest reply</h3><div class="md">${renderMarkdown(clip(v.lastAssistantText, 600))}</div></section>` : ''}
+      ${live}${agentsBlock}
+      <div class="when">${mode === 'off' ? 'Summaries are off (settings).' : v.summaryError ? 'Summary failed: ' + esc(v.summaryError) : v.summarizing ? 'Writing a summary…' : 'No summary yet.'} ${refresh}</div>`;
+  }
   sumEl.querySelector('[data-act="summarize"]')?.addEventListener('click', () => post(`/api/session/${encodeURIComponent(v.id)}/summarize`));
+  sumEl.querySelectorAll('[data-agent]').forEach((b) => b.addEventListener('click', () => open(v.id, b.dataset.agent)));
+  $('drawer-foot').innerHTML = `${actBtn('copy', 'copy', 'Copy resume command', 'cd … && claude --resume …')}${actBtn('history', 'history', 'Recent sessions', 'Recent sessions in this project')}<button class="act toggle-transcript" data-act="transcript">${ICON.summary}<span>${state.transcriptOpen ? 'Hide transcript' : 'Transcript'}</span></button>`;
   wireActs(v);
 }
 
 function renderAgentHead(v, a, now) {
   const line = a.state === 'running' ? plain(activityLine({ state: 'working', activity: a.activity })) : a.state === 'done' ? `Finished${a.endedAt ? ' ' + ago(a.endedAt, now) + ' ago' : ''}${a.startedAt && a.endedAt && a.endedAt > a.startedAt ? ' after ' + duration(a.endedAt - a.startedAt) : ''}` : 'Ended with its session';
-  const stats = [[tokens(a.contextTokens), 'context'], [String(a.toolCalls), 'tool calls'], [shortModelName(a.model) || 'inherited', 'model'], a.startedAt ? [duration((a.endedAt ?? now) - a.startedAt), 'runtime'] : null].filter(Boolean);
+  const stats = [[tokens(a.contextTokens), 'context'], [String(a.toolCalls), 'tool calls'], [shortModelName(a.model || v.model) || '–', a.effort ? `${a.effort} effort` : 'model'], a.startedAt ? [duration((a.endedAt ?? now) - a.startedAt), 'runtime'] : null].filter(Boolean);
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(a.description || a.type)}">${esc(a.description || a.type)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
     <div class="meta"><span class="pill ${a.state}">${esc(stateLabel(a.state))}</span><span class="where">${esc(String(a.type).split(':').pop())}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''} · in ${esc(v.name || v.title)}</span></div>
-    <div class="now">${esc(line)}</div>
-    <div class="acts">${actBtn('up', 'up', 'Session', 'Back to the session')}${a.parentAgentId ? actBtn('parent', 'up', 'Parent agent') : ''}</div>
     <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}</div>`;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary'; sumEl.title = '';
-  sumEl.innerHTML = a.lastText ? `<div class="progress">${esc(clip(plain(a.lastText), 400))}</div>` : '<div class="progress">No reply from this agent yet.</div>';
+  sumEl.innerHTML = `${a.state === 'running' ? `<section class="sec now"><h3>Activity</h3><p>${esc(line)}</p></section>` : ''}<section class="sec"><h3>${a.state === 'running' ? 'Latest reply' : 'Result'}</h3>${a.lastText ? `<div class="md">${renderMarkdown(clip(a.lastText, 1500))}</div>` : '<p class="muted">No reply from this agent yet.</p>'}</section>`;
+  $('drawer-foot').innerHTML = `${actBtn('up', 'up', 'Back to session')}${a.parentAgentId ? actBtn('parent', 'up', 'Parent agent') : ''}<button class="act toggle-transcript" data-act="transcript">${ICON.summary}<span>${state.transcriptOpen ? 'Hide transcript' : 'Transcript'}</span></button>`;
   wireActs(v, a);
 }
 
 function wireActs(v, a = null) {
-  const head = $('drawer-head');
-  const on = (act, fn) => head.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
+  const on = (act, fn) => document.querySelectorAll(`#drawer-head [data-act="${act}"], #drawer-foot [data-act="${act}"]`).forEach((b) => b.addEventListener('click', fn));
+  on('transcript', () => { state.transcriptOpen = !state.transcriptOpen; try { localStorage.setItem('radar.transcript', state.transcriptOpen ? '1' : '0'); } catch { /* optional */ } applyTranscript(); renderDrawer(); });
   on('close', close);
   on('up', () => open(v.id, null));
   on('parent', () => open(v.id, a.parentAgentId));
   on('summarize', () => post(`/api/session/${encodeURIComponent(v.id)}/summarize`));
   on('copy', (e) => { navigator.clipboard?.writeText(`cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`); note(e.currentTarget, 'Copied'); });
   on('history', () => showHistory(v.cwd));
-  on('focus', async (e) => { const btn = e.currentTarget; const r = await post(`/api/session/${encodeURIComponent(v.id)}/focus`); note(btn, r?.ok ? (r.note || 'Focused') : (r?.reason || 'Could not focus the terminal')); });
 }
 
-/** Short inline feedback under the action row. */
+/** Short inline feedback on an action button. */
 function note(btn, text) {
-  const acts = btn.closest('.acts'); let el = acts.nextElementSibling;
-  if (!el?.classList.contains('act-note')) { el = document.createElement('div'); el.className = 'act-note'; acts.after(el); }
-  el.textContent = text; el.hidden = false;
-  clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 4000);
+  const label = btn.querySelector('span'); const old = label.textContent;
+  label.textContent = text; clearTimeout(btn._t); btn._t = setTimeout(() => { label.textContent = old; }, 2000);
+}
+
+function applyTranscript() {
+  const open = state.transcriptOpen;
+  $('stream-tools').hidden = !open; $('stream').hidden = !open;
+  $('drawer').classList.toggle('transcript-open', open);
+  if (open && state.selected) { const v = state.snap?.sessions.find((s) => s.id === state.selected.sessionId); if (v) stream.open(v.id, state.selected.agentId); }
+  else stream.close();
 }
 
 async function showHistory(cwd) {
   const list = await api(`/api/history?cwd=${encodeURIComponent(cwd)}`);
   const now = Date.now(), el = $('drawer-summary');
+  state.drawerView = 'history';
   el.className = 'drawer-summary history';
-  el.innerHTML = `<div class="headline">Recent sessions in ${esc(cwd.split('/').pop())}</div><ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><div>${esc(h.title || h.id.slice(0, 8))}${h.live ? ' <span class="pill working">live</span>' : ''}</div><div class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${Math.round(h.size / 1024)} KB</div></button></li>`).join('')}</ul>`;
+  el.innerHTML = `<div class="headline">Recent sessions in ${esc(cwd.split('/').pop())} <button class="link" data-act="back">back</button></div><ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><div>${esc(h.title || h.id.slice(0, 8))}${h.live ? ' <span class="pill working">live</span>' : ''}</div><div class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${Math.round(h.size / 1024)} KB</div></button></li>`).join('')}</ul>`;
+  el.querySelector('[data-act="back"]').addEventListener('click', () => { state.drawerView = 'summary'; renderDrawer(); });
   el.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', async () => {
     const id = b.dataset.open;
     await post('/api/history/open', { cwd, id });
@@ -389,6 +412,7 @@ function setupUI() {
   $('attention-pop').addEventListener('click', (e) => { const b = e.target.closest('[data-focus]'); if (b) { focusSession(b.dataset.focus); $('attention-pop').hidden = true; } });
   document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.popover, #attention-badge, #settings-btn')) { $('attention-pop').hidden = true; $('settings-pop').hidden = true; } });
   $('summaries-mode').onchange = (e) => post('/api/settings', { summaries: e.target.value });
+  $('summaries-refresh').onchange = (e) => post('/api/settings', { summaryRefreshMinutes: Number(e.target.value) });
   document.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   $('thinking-toggle').addEventListener('click', toggleThinking);
   $('follow').addEventListener('change', (e) => stream.setFollow(e.target.checked));
@@ -412,7 +436,8 @@ function setupUI() {
 }
 
 setInterval(() => { if (state.snap) { renderRail(state.snap); if (!$('attention-pop').hidden) renderAttentionPop(); } }, 5000);
-try { const m = localStorage.getItem('radar.mode'); if (m === 'all' || m === 'active') state.mode = m; } catch { /* optional */ }
+try { const m = localStorage.getItem('radar.mode'); if (m === 'all' || m === 'active') state.mode = m; state.transcriptOpen = localStorage.getItem('radar.transcript') === '1'; } catch { /* optional */ }
+applyTranscript();
 setupCanvas(); setupUI(); connect();
 let fitted = false;
 const fitOnce = setInterval(() => { if (state.scene?.nodes.length && !fitted) { fitView(false); fitted = true; clearInterval(fitOnce); } }, 150);

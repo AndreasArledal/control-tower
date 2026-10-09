@@ -11,6 +11,14 @@ export function ago(ts, now = Date.now()) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
+/** Coarser than ago(): stays stable for a minute so node labels do not churn every second. */
+export function agoCoarse(ts, now = Date.now()) {
+  if (!ts) return '';
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 60) return 'just now';
+  return ago(ts, now);
+}
+
 export function duration(ms) {
   if (ms == null || ms < 0) return '';
   const s = Math.round(ms / 1000);

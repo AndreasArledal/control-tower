@@ -9,7 +9,7 @@ test('model tracks title, prompts, last text and counts', () => {
   const m = new SessionModel();
   m.ingest(e('prompt', { text: 'Build a dashboard please' }, 0));
   m.ingest(e('thinking', { text: 'ok' }, 1));
-  m.ingest(e('tool_use', { tool: { id: 't1', name: 'Bash', input: { command: 'ls -la' } }, usage: { context: 1200 }, model: 'claude-fable-5-1' }, 2));
+  m.ingest(e('tool_use', { tool: { id: 't1', name: 'Bash', input: { command: 'ls -la' } }, usage: { context: 1200 }, model: 'claude-fable-5-1', effort: 'high' }, 2));
   m.ingest(e('tool_result', { result: { toolUseId: 't1', text: 'files', isError: false } }, 3));
   m.ingest(e('text', { text: 'Done, here it is.', stopReason: 'end_turn' }, 4));
   m.ingest(e('title', { text: 'Dashboard build' }, 5));
@@ -21,6 +21,7 @@ test('model tracks title, prompts, last text and counts', () => {
   assert.equal(m.toolCalls, 1);
   assert.equal(m.contextTokens, 1200);
   assert.equal(m.model, 'claude-fable-5-1');
+  assert.equal(m.effort, 'high');
   assert.equal(m.pendingTools.size, 0);
   assert.equal(m.lastStopReason, 'end_turn');
 });

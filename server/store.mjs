@@ -14,6 +14,7 @@ import { focusProcess } from './focus.mjs';
 const ATTENTION = new Set(['question', 'permission', 'done']);
 const EXITED_TTL_MS = 6 * 60 * 60 * 1000;
 const SUMMARY_COOLDOWN_MS = 20_000;
+const DEFAULT_REFRESH_MIN = 4;
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
@@ -51,7 +52,7 @@ export class RadarStore extends EventEmitter {
   constructor({ home, summarizer = null, settings = {} }) {
     super();
     this.home = home; this.summarizer = summarizer;
-    this.settings = { summaries: 'auto', ...settings }; // auto | manual | off
+    this.settings = { summaries: 'auto', summaryRefreshMinutes: DEFAULT_REFRESH_MIN, ...settings }; // summaries: auto | manual | off
     this.sessions = new Map();
     this.spoolDir = join(radarDir(home), 'events');
     this.stateFile = join(radarDir(home), 'state.json');
@@ -229,7 +230,7 @@ export class RadarStore extends EventEmitter {
       id: a.id, parentAgentId, toolUseId,
       description: a.meta.description || spawn?.description || a.model.title,
       type: a.meta.agentType || spawn?.type || 'agent', isFork: Boolean(a.meta.isFork), depth: a.meta.spawnDepth ?? 1,
-      background: a.meta.requestShape === 'background', model: a.model.model || (a.meta.model && a.meta.model !== 'inherit' ? a.meta.model : null),
+      background: a.meta.requestShape === 'background', model: a.model.model || (a.meta.model && a.meta.model !== 'inherit' ? a.meta.model : null), effort: a.model.effort,
       state, activity: state === 'running' ? act : { kind: 'idle', label: '', since: a.endedAt },
       startedAt: a.startedAt, endedAt: a.endedAt, lastActivityAt: a.model.lastActivityAt,
       toolCalls: a.model.toolCalls, turns: a.model.turns, contextTokens: a.model.contextTokens, errors: a.model.errors,
@@ -253,7 +254,7 @@ export class RadarStore extends EventEmitter {
       activity: act, lastPrompt: clip(m.lastPrompt, 400), lastPromptAt: m.lastPromptAt, firstPrompt: clip(m.firstPrompt, 400),
       lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
       lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
-      contextTokens: m.contextTokens, outputTokens: m.outputTokens, model: m.model, thinkingChars: m.thinkingChars, entryCount: s.entries.length,
+      contextTokens: m.contextTokens, outputTokens: m.outputTokens, model: m.model, effort: m.effort, thinkingChars: m.thinkingChars, entryCount: s.entries.length,
       hooksSeen: s.hooksSeen, pinned: s.pinned, summary: s.summary, summaryError: s.summaryError, summarizing: Boolean(this.summarizer?.isQueued(s.id)),
       agents, runningAgents: agents.filter((a) => a.state === 'running').length,
     };
@@ -289,7 +290,7 @@ export class RadarStore extends EventEmitter {
     const unseen = attention.filter((a) => !a.seen).length;
     return {
       generatedAt: this._now(), hooksSeen: this.hooksSeen, hooksInstalled: this.hooksInstalled(),
-      summaries: { mode: this.settings.summaries, available: this.summarizer ? this.summarizer.available : false, lastError: this.summarizer?.lastError ?? null },
+      summaries: { mode: this.settings.summaries, available: this.summarizer ? this.summarizer.available : false, lastError: this.summarizer?.lastError ?? null, spend: this.summarizer?.spend ?? null, refreshMinutes: this.settings.summaryRefreshMinutes },
       projects, sessions, attention, unseen,
     };
   }
@@ -312,7 +313,10 @@ export class RadarStore extends EventEmitter {
     if (!v.alive || s.model.turns === 0) return;
     const enteredAttention = prevState && prevState !== v.state && ATTENTION.has(v.state);
     const firstSight = prevState == null && s.loaded;
-    if (!enteredAttention && !firstSight) return;
+    // while a session works, keep its summary fresh so the panel answers "where are we" without reading the transcript
+    const refreshMs = Math.max(1, Number(this.settings.summaryRefreshMinutes) || DEFAULT_REFRESH_MIN) * 60_000;
+    const stale = v.state === 'working' && (!s.summary || this._now() - (s.summary.at ?? 0) > refreshMs) && s.summaryKey !== this.summaryKey(s);
+    if (!enteredAttention && !firstSight && !stale) return;
     this.requestSummary(s.id, { force: false });
   }
 

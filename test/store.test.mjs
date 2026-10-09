@@ -150,3 +150,22 @@ test('projects carry a headline: session titles by default, the summarizer resul
   assert.equal(store.snapshot().projects[0].headline, 'Shipping the dashboard');
   store.stop();
 });
+
+test('a working session gets its summary refreshed once it is older than the refresh interval', async () => {
+  const { home, sid } = fakeHome();
+  const requests = [];
+  const fakeSummarizer = { available: true, lastError: null, lastRunAt: new Map(), cached: () => null, isQueued: () => false, request: (id, key) => { requests.push({ id, key }); return true; } };
+  const store = new RadarStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto', summaryRefreshMinutes: 1 } });
+  let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
+  await store.tick();
+  const first = requests.filter((r) => r.id === sid).length;
+  assert.ok(first >= 1, 'summarised on first sight');
+  store.onSummary(sid, { headline: 'h', goal: '', done: [], now: '', next: '', at: clock }, requests.find((r) => r.id === sid).key);
+  clock += 30_000; await store.tick();
+  assert.equal(requests.filter((r) => r.id === sid).length, first, 'not yet stale');
+  clock += 60_000; fakeSummarizer.lastRunAt.set(sid, 0);
+  store.sessions.get(sid).model.count++; // something happened since
+  await store.tick();
+  assert.equal(requests.filter((r) => r.id === sid).length, first + 1, 'refreshed after the interval');
+  store.stop();
+});

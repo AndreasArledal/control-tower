@@ -9,7 +9,8 @@ const L = (o) => JSON.stringify(o);
 const base = { uuid: 'u1', parentUuid: 'p1', timestamp: '2026-10-09T07:23:10.636Z', sessionId: 's1', isSidechain: false };
 
 test('parses a typed human prompt', () => {
-  const e = parseLine(L({ ...base, type: 'user', message: { role: 'user', content: 'Build it' }, origin: { kind: 'human' } }), 0);
+  const e = parseLine(L({ ...base, type: 'user', effort: 'high', message: { role: 'user', content: 'Build it' }, origin: { kind: 'human' } }), 0);
+  assert.equal(e[0].effort, 'high');
   assert.equal(e.length, 1);
   assert.equal(e[0].kind, 'prompt');
   assert.equal(e[0].text, 'Build it');

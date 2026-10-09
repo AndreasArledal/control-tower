@@ -42,7 +42,8 @@
 <aside class="drawer" id="drawer" hidden aria-label="Session details">
   <div class="drawer-head" id="drawer-head"></div>
   <div class="drawer-summary" id="drawer-summary"></div>
-  <div class="stream-tools">
+  <div class="drawer-foot" id="drawer-foot"></div>
+  <div class="stream-tools" id="stream-tools">
     <div class="seg" role="tablist">
       <button class="seg-btn on" data-mode="story" role="tab" title="Prompts, replies, and the work in between as one line per step">Story</button>
       <button class="seg-btn" data-mode="raw" role="tab" title="Every transcript entry (r)">Raw</button>
@@ -62,7 +63,15 @@
       <option value="off">off</option>
     </select>
   </label>
-  <p class="hint">Written by Haiku through your own claude login, about a fifth of a cent each.</p>
+  <label>Refresh while working
+    <select id="summaries-refresh">
+      <option value="2">every 2 min</option>
+      <option value="4">every 4 min</option>
+      <option value="10">every 10 min</option>
+      <option value="30">every 30 min</option>
+    </select>
+  </label>
+  <p class="hint" id="spend">Written by Haiku through your own claude login.</p>
   <div id="hooks-row"></div>
   <p class="hint">Keys: <kbd>n</kbd> next that needs you · <kbd>f</kbd> fit · <kbd>Esc</kbd> close · <kbd>r</kbd> raw · <kbd>t</kbd> thinking</p>
 </div>

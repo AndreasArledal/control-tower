@@ -54,6 +54,7 @@ export class SessionModel {
     this.contextTokens = 0;
     this.outputTokens = 0;
     this.model = null;
+    this.effort = null;
     this.lastStopReason = null;
     this.lastKind = null;
     this.pendingTools = new Map(); // toolUseId -> { name, input, ts, i }
@@ -84,6 +85,7 @@ export class SessionModel {
     if (e.usage?.context) this.contextTokens = e.usage.context;
     if (e.usage?.output) this.outputTokens += e.usage.output;
     if (e.model) this.model = e.model;
+    if (e.effort) this.effort = e.effort;
     if (e.stopReason !== undefined && e.stopReason !== null) this.lastStopReason = e.stopReason;
     switch (e.kind) {
       case 'title': this.aiTitle = e.text || this.aiTitle; break;
