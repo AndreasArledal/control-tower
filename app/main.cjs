@@ -5,14 +5,16 @@ const http = require('node:http');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-/** GUI apps get a minimal PATH; borrow the login shell's so `claude` (and wezterm, tmux…) resolve. */
+/** GUI apps get a minimal environment; borrow PATH and CLAUDE_CONFIG_DIR from the login shell so `claude` resolves and the right config dir is watched. */
 function fixPath() {
   if (process.platform === 'win32') return;
   try {
     const sh = process.env.SHELL || '/bin/zsh';
-    const out = execFileSync(sh, ['-ilc', 'echo "__PATH__$PATH"'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const out = execFileSync(sh, ['-ilc', 'echo "__PATH__$PATH"; echo "__CFG__$CLAUDE_CONFIG_DIR"'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
     const m = out.split('\n').find((l) => l.startsWith('__PATH__'));
     if (m) process.env.PATH = m.slice(8);
+    const c = out.split('\n').find((l) => l.startsWith('__CFG__'));
+    if (c && c.slice(7)) process.env.CLAUDE_CONFIG_DIR = c.slice(7);
   } catch { /* keep what we have */ }
   for (const extra of [path.join(process.env.HOME || '', '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin']) if (!process.env.PATH.split(':').includes(extra)) process.env.PATH += ':' + extra;
 }
@@ -75,13 +77,16 @@ function buildMenu() {
   return Menu.buildFromTemplate(items);
 }
 
+/** The Dock icon (and with it ⌘-Tab) exists only while the window is open; closed, the app is a pure menu bar item. */
 function showWindow(hash = '') {
   if (!win) {
-    win = new BrowserWindow({ width: 1360, height: 900, show: false, title: 'Control Tower', backgroundColor: '#161B26', webPreferences: { contextIsolation: true, sandbox: true } });
+    win = new BrowserWindow({ width: 1360, height: 900, show: false, title: 'Control Tower', backgroundColor: '#0D1117', webPreferences: { contextIsolation: true, sandbox: true } });
     win.on('close', (e) => { if (!app.isQuitting) { e.preventDefault(); win.hide(); } });
+    win.on('hide', () => { if (process.platform === 'darwin') app.dock?.hide(); });
     win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   }
-  win.loadURL(BASE + '/' + hash);
+  if (process.platform === 'darwin') app.dock?.show();
+  if (hash || !win.isVisible()) win.loadURL(BASE + '/' + hash);
   win.show(); win.focus();
 }
 
@@ -101,3 +106,4 @@ app.whenReady().then(async () => {
 });
 app.on('before-quit', () => { app.isQuitting = true; radar?.close(); });
 app.on('window-all-closed', () => { /* stay in the menu bar */ });
+app.on('activate', () => showWindow()); // Dock click or ⌘-Tab while hidden
