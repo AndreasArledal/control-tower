@@ -109,20 +109,26 @@ function renderHooksRow(snap) {
 
 /* ---------- project rail ---------- */
 /** Which projects the canvas shows: an automatic mode (active / all) or an explicit pick. */
+/** Projects worth listing: ones with a live or pinned session, or all of them when "ended" is on. */
+function listedProjects(snap = state.snap) {
+  return snap.projects.filter((p) => state.showExited || p.live > 0 || snap.sessions.some((v) => v.cwd === p.id && v.pinned));
+}
+
 function visibleProjects(snap = state.snap) {
-  if (state.mode === 'all') return new Set(snap.projects.map((p) => p.id));
-  if (state.mode === 'active') { const act = snap.projects.filter((p) => p.active); return new Set((act.length ? act : snap.projects).map((p) => p.id)); }
+  const listed = listedProjects(snap);
+  if (state.mode === 'all') return new Set(listed.map((p) => p.id));
+  if (state.mode === 'active') { const act = listed.filter((p) => p.active); return new Set((act.length ? act : listed).map((p) => p.id)); }
   return state.selectedProjects;
 }
 
 function renderRail(snap) {
   const all = state.mode !== 'pick';
-  const chips = snap.projects.map((p) => {
-    const c = p.counts, attn = (c.question ?? 0) + (c.permission ?? 0);
+  const chips = listedProjects(snap).map((p) => {
+    const c = p.counts, attn = (c.question ?? 0) + (c.permission ?? 0) + snap.sessions.filter((v) => v.cwd === p.id && v.followUp && v.alive).length;
     const dot = attn ? 'blocking' : c.working ? 'working' : c.done ? 'done' : p.live ? 'idle' : 'exited';
     return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n">${p.live || p.sessions.length}</span>${attn ? `<span class="att">${attn}</span>` : ''}</button>`;
   }).join('');
-  const nActive = snap.projects.filter((p) => p.active).length;
+  const nActive = listedProjects(snap).filter((p) => p.active).length;
   $('rail').innerHTML = `<button class="chip all ${state.mode === 'active' ? 'selected' : ''}" data-project="active" title="Projects that are working, need you, just finished, or were used in the last 30 minutes">Active<span class="n">${nActive}</span></button><button class="chip all ${state.mode === 'all' ? 'selected' : ''}" data-project="*">All</button>` + chips;
 }
 
@@ -207,7 +213,7 @@ function setupCanvas() {
   $('fit-btn').onclick = () => fitView();
   $('zoom-in').onclick = () => { state.zoom = Math.min(2, state.zoom * 1.2); applyTransform(); };
   $('zoom-out').onclick = () => { state.zoom = Math.max(0.3, state.zoom / 1.2); applyTransform(); };
-  $('show-exited').onchange = (e) => { state.showExited = e.target.checked; renderGraph(); fitView(); };
+  $('show-exited').onchange = (e) => { state.showExited = e.target.checked; renderRail(state.snap); renderGraph(); fitView(); };
 }
 
 function activate(node) {
