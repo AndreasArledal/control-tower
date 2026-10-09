@@ -43,7 +43,7 @@ function onSnapshot(snap) {
   $('summaries-refresh').value = String(snap.summaries.refreshMinutes ?? 4);
   const sp = snap.summaries.spend;
   $('spend').textContent = sp && sp.count ? `Haiku via your claude login. Today: ${sp.todayCount} summar${sp.todayCount === 1 ? 'y' : 'ies'}, $${sp.todayUsd.toFixed(3)} · all time: ${sp.count}, $${sp.usd.toFixed(2)}.` : 'Written by Haiku through your own claude login, about a fifth of a cent each.';
-  renderBadge(snap); renderHooksRow(snap); detectTransitions(snap);
+  renderHooksRow(snap); detectTransitions(snap);
   if (!state.hashApplied) { state.hashApplied = true; selectFromHash(); }
   renderRail(snap); renderGraph(); if (state.selected) renderDrawer();
   if (!$('attention-pop').hidden) renderAttentionPop();
@@ -75,31 +75,41 @@ function renderStatus(snap) {
   const agents = live.reduce((k, s) => k + s.runningAgents, 0);
   const parts = [];
   if (n('working')) parts.push(`<span class="st working"><i></i>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
-  if (n('needs')) parts.push(`<span class="st blocking"><i></i>${n('needs')} need${n('needs') === 1 ? 's' : ''} you</span>`);
-  if (n('paused')) parts.push(`<span class="st idle"><i></i>${n('paused')} ready for a prompt</span>`);
-  $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
+  if (n('paused')) parts.push(`<span class="st idle"><i></i>${n('paused')} ready</span>`);
+  const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length;
+  const open = !$('attention-pop').hidden;
+  if (total) parts.push(`<button class="st needs ${unseen ? 'unseen' : ''} ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="${unseen ? `${unseen} new` : 'Sessions that need you'}">${total} need${total === 1 ? 's' : ''} you <span class="caret">⌄</span></button>`);
+  $('status').innerHTML = live.length ? parts.join('<span class="sep">·</span>') : '<span class="st idle">no sessions running</span>';
+  $('attention-badge')?.addEventListener('click', () => togglePop('attention-pop'));
+  if (state.prevAttention != null && unseen > state.prevAttention) { const b = $('attention-badge'); if (b) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); } }
+  state.prevAttention = unseen;
+  if (!total) $('attention-pop').hidden = true;
+  if (open) positionPop();
+}
+
+function positionPop() {
+  const b = $('attention-badge'), pop = $('attention-pop'); if (!b) return;
+  const r = b.getBoundingClientRect();
+  pop.style.top = `${r.bottom + 6}px`; pop.style.left = `${Math.min(r.left, window.innerWidth - 300)}px`; pop.style.right = 'auto';
 }
 
 function markSeen(id) { const a = state.snap?.attention.find((x) => x.sessionId === id); if (a && !a.seen) { a.seen = true; post(`/api/session/${encodeURIComponent(id)}/seen`); renderBadge(state.snap); dismissToast(id); } }
 
-function renderBadge(snap) {
-  const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length, b = $('attention-badge');
-  $('attention-count').textContent = total;
-  b.hidden = total === 0;
-  b.classList.toggle('calm', unseen === 0);
-  b.title = unseen ? `${unseen} new` : 'All seen';
-  if (state.prevAttention != null && unseen > state.prevAttention) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); }
-  state.prevAttention = unseen;
-  if (total === 0) $('attention-pop').hidden = true;
-}
+function renderBadge(snap) { renderStatus(snap); }
 
+const ATT_GLYPH = { question: '?', permission: '◆', followup: '?' };
 function renderAttentionPop() {
   const snap = state.snap, now = Date.now();
-  $('attention-pop').innerHTML = snap.attention.map((a) => `
-    <button class="att-item ${a.state} ${a.seen ? 'seen' : ''}" data-focus="${esc(a.sessionId)}">
-      <div class="t"><span>${esc(a.projectName)} · ${esc(stateLabel(a.state))}</span><span class="age">${ago(a.since, now)}</span></div>
-      <div class="m">${esc(a.title)}${a.message ? ' — ' + esc(plain(a.message)) : ''}</div>
-    </button>`).join('') || '<p class="hint" style="padding:8px">Nothing needs you right now.</p>';
+  const seenBefore = state.popSeen ?? new Set();
+  $('attention-pop').innerHTML = `<div class="pop-head"><span>Needs you</span><button class="icon-btn" data-close aria-label="Close">${ICON.close}</button></div>` + (snap.attention.map((a) => `
+    <button class="att-item ${a.state} ${a.seen ? 'seen' : ''} ${!a.seen && !seenBefore.has(a.sessionId + ':' + a.since) ? 'new' : ''}" data-focus="${esc(a.sessionId)}">
+      <span class="g">${ATT_GLYPH[a.state] ?? '?'}</span>
+      <span class="body"><span class="t">${esc(a.projectName)} · ${esc(a.state === 'followup' ? 'in the last reply' : stateLabel(a.state))}</span><span class="m">${esc(plain(a.message || a.title))}</span></span>
+      <span class="age">${ago(a.since, now)}</span>
+    </button>`).join('') || '<p class="hint" style="padding:8px">Nothing needs you right now.</p>');
+  state.popSeen = new Set(snap.attention.map((a) => a.sessionId + ':' + a.since));
+  $('attention-pop').querySelector('[data-close]').addEventListener('click', () => { $('attention-pop').hidden = true; renderStatus(snap); });
+  positionPop();
 }
 
 function renderHooksRow(snap) {
@@ -127,12 +137,10 @@ function renderRail(snap) {
   const all = state.mode !== 'pick';
   const chips = listedProjects(snap).map((p) => {
     const states = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v));
-    const attn = states.filter((s) => s === 'needs').length;
-    const dot = attn ? 'blocking' : states.includes('working') ? 'working' : p.live ? 'idle' : 'exited';
-    return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}${attn ? `\n${attn} session${attn === 1 ? '' : 's'} need${attn === 1 ? 's' : ''} you` : ''}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n ${attn ? 'attn' : ''}">${attn ? `${attn} of ${p.live}` : (p.live || p.sessions.length)}</span></button>`;
+    const dot = states.includes('needs') ? 'blocking' : states.includes('working') ? 'working' : p.live ? 'idle' : 'exited';
+    return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: show only this project · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}</button>`;
   }).join('');
-  const nActive = listedProjects(snap).filter((p) => p.active).length;
-  $('rail').innerHTML = `<button class="chip all ${state.mode === 'active' ? 'selected' : ''}" data-project="active" title="Projects that are working, need you, just finished, or were used in the last 30 minutes">Active<span class="n">${nActive}</span></button><button class="chip all ${state.mode === 'all' ? 'selected' : ''}" data-project="*">All</button>` + chips;
+  $('rail').innerHTML = `<span class="rail-label">Show</span><button class="chip all ${state.mode === 'active' ? 'selected' : ''}" data-project="active" title="Projects with something going on, or used in the last hour">Active</button><button class="chip all ${state.mode === 'all' ? 'selected' : ''}" data-project="*">All</button><span class="rail-sep"></span>` + chips;
 }
 
 /* ---------- graph ---------- */
@@ -412,7 +420,7 @@ function togglePop(id) {
   const pop = $(id), other = id === 'attention-pop' ? 'settings-pop' : 'attention-pop';
   $(other).hidden = true;
   pop.hidden = !pop.hidden;
-  if (!pop.hidden && id === 'attention-pop') renderAttentionPop();
+  if (id === 'attention-pop') { if (!pop.hidden) renderAttentionPop(); renderStatus(state.snap); }
 }
 
 function setupUI() {
@@ -429,10 +437,10 @@ function setupUI() {
     try { localStorage.setItem('radar.mode', state.mode); } catch { /* optional */ }
     renderRail(state.snap); renderGraph(); fitView();
   });
-  $('attention-badge').onclick = () => togglePop('attention-pop');
   $('settings-btn').onclick = () => togglePop('settings-pop');
-  $('attention-pop').addEventListener('click', (e) => { const b = e.target.closest('[data-focus]'); if (b) { focusSession(b.dataset.focus); $('attention-pop').hidden = true; } });
-  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.popover, #attention-badge, #settings-btn')) { $('attention-pop').hidden = true; $('settings-pop').hidden = true; } });
+  $('attention-pop').addEventListener('click', (e) => { const b = e.target.closest('[data-focus]'); if (b) { focusSession(b.dataset.focus); $('attention-pop').hidden = true; renderStatus(state.snap); } });
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.popover, #attention-badge, #settings-btn')) { const was = !$('attention-pop').hidden; $('attention-pop').hidden = true; $('settings-pop').hidden = true; if (was) renderStatus(state.snap); } });
+  window.addEventListener('resize', () => { if (!$('attention-pop').hidden) positionPop(); });
   $('summaries-mode').onchange = (e) => post('/api/settings', { summaries: e.target.value });
   $('summaries-refresh').onchange = (e) => post('/api/settings', { summaryRefreshMinutes: Number(e.target.value) });
   document.querySelectorAll('.seg-btn').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
@@ -442,9 +450,9 @@ function setupUI() {
     if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
     const openDrawer = !$('drawer').hidden;
     switch (e.key) {
-      case 'Escape': if (!$('attention-pop').hidden || !$('settings-pop').hidden) { $('attention-pop').hidden = true; $('settings-pop').hidden = true; } else close(); break;
+      case 'Escape': if (!$('attention-pop').hidden || !$('settings-pop').hidden) { $('attention-pop').hidden = true; $('settings-pop').hidden = true; renderStatus(state.snap); } else close(); break;
       case 'f': if (openDrawer) stream.setFollow(!stream.follow); else fitView(); break;
-      case 'n': { const ids = state.snap?.attention.map((a) => a.sessionId) ?? []; if (!ids.length) break; const i = ids.indexOf(state.selected?.sessionId); focusSession(ids[(i + 1) % ids.length]); break; }
+      case 'n': if (state.snap?.attention.length) togglePop('attention-pop'); break;
       case '+': case '=': $('zoom-in').click(); break;
       case '-': $('zoom-out').click(); break;
       case 't': if (openDrawer) toggleThinking(); break;
@@ -457,7 +465,7 @@ function setupUI() {
   window.addEventListener('resize', () => fitView(false));
 }
 
-setInterval(() => { if (state.snap) { renderRail(state.snap); if (!$('attention-pop').hidden) renderAttentionPop(); } }, 5000);
+setInterval(() => { if (state.snap && !$('attention-pop').hidden) renderAttentionPop(); }, 5000);
 try { const m = localStorage.getItem('radar.mode'); if (m === 'all' || m === 'active') state.mode = m; state.transcriptOpen = localStorage.getItem('radar.transcript') === '1'; } catch { /* optional */ }
 applyTranscript();
 setupCanvas(); setupUI(); connect();
