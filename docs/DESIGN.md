@@ -45,6 +45,8 @@ Attention clears when a new prompt arrives, or (for permissions) when the transc
 
 Follow-up: each session summary carries `status` (working / waiting_for_user / complete) and `waitingFor`. A live session that is idle or done with a verdict of waiting_for_user newer than its last reply gets `followUp`, which counts as needing you, renders as "needs you" in amber (soft dashed ring, no pulse), and keeps its project active regardless of the one-hour window.
 
+Display states: the page derives five mutually exclusive states from the server's (`web/format.js` `uiState`): working; needs you (question, permission, or follow-up); finished (done, or a reply within the last hour with nothing asked); idle (over an hour quiet); ended.
+
 Visibility: Active mode shows projects with any live session that is not idle, has a follow-up, or had activity within the last hour. Ended sessions are hidden unless toggled or opened from the recent list.
 
 Agents: `done` on `SubagentStop`, on the parent's tool result (foreground agents only; background launches return immediately), or on a final `end_turn` text with no pending tool calls; `exited` with the session; otherwise `running`.

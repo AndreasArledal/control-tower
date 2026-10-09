@@ -1,4 +1,4 @@
-import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain } from './format.js';
+import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK } from './format.js';
 import { renderMarkdown } from './stream.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView } from './stream.js';
@@ -68,14 +68,13 @@ function detectTransitions(snap) {
 
 /* ---------- top bar: status line, attention badge, settings ---------- */
 function renderStatus(snap) {
-  const live = snap.sessions.filter((s) => s.alive);
-  const n = (st) => live.filter((s) => s.state === st).length;
+  const now = Date.now(), live = snap.sessions.filter((s) => s.alive);
+  const n = (st) => live.filter((s) => uiState(s, now) === st).length;
   const agents = live.reduce((k, s) => k + s.runningAgents, 0);
   const parts = [];
-  const waiting = n('question') + n('permission') + live.filter((s) => s.followUp && (s.state === 'idle' || s.state === 'done')).length;
   if (n('working')) parts.push(`<span class="st working"><i></i>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
-  if (waiting) parts.push(`<span class="st blocking"><i></i>${waiting} waiting for you</span>`);
-  if (n('done')) parts.push(`<span class="st done"><i></i>${n('done')} finished</span>`);
+  if (n('needs')) parts.push(`<span class="st blocking"><i></i>${n('needs')} need${n('needs') === 1 ? 's' : ''} you</span>`);
+  if (n('finished')) parts.push(`<span class="st done"><i></i>${n('finished')} finished</span>`);
   if (n('idle')) parts.push(`<span class="st idle"><i></i>${n('idle')} idle</span>`);
   $('status').innerHTML = live.length ? parts.join('') : '<span class="st idle">no sessions running</span>';
 }
@@ -123,9 +122,11 @@ function visibleProjects(snap = state.snap) {
 
 function renderRail(snap) {
   const all = state.mode !== 'pick';
+  const now = Date.now();
   const chips = listedProjects(snap).map((p) => {
-    const c = p.counts, attn = (c.question ?? 0) + (c.permission ?? 0) + snap.sessions.filter((v) => v.cwd === p.id && v.followUp && v.alive).length;
-    const dot = attn ? 'blocking' : c.working ? 'working' : c.done ? 'done' : p.live ? 'idle' : 'exited';
+    const states = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v, now));
+    const attn = states.filter((s) => s === 'needs').length;
+    const dot = attn ? 'blocking' : states.includes('working') ? 'working' : states.includes('finished') ? 'done' : p.live ? 'idle' : 'exited';
     return `<button class="chip ${!all && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: only this · shift-click: add"><span class="dot ${dot}"></span>${esc(p.name)}<span class="n">${p.live || p.sessions.length}</span>${attn ? `<span class="att">${attn}</span>` : ''}</button>`;
   }).join('');
   const nActive = listedProjects(snap).filter((p) => p.active).length;
@@ -274,12 +275,13 @@ function actBtn(act, icon, label, title = label) { return `<button class="act" d
 
 function renderSessionHead(v, now) {
   const resume = `cd ${shellQuote(v.cwd)} && claude --resume ${v.id}`;
-  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp && (v.state === 'idle' || v.state === 'done') ? `Waiting for you: ${plain(v.followUp.reason)}` : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
+  const ui = uiState(v, now);
+  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp && ui === 'needs' ? `Needs you: ${plain(v.followUp.reason)}` : ui === 'finished' && v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn.', 300) : '';
   const stats = [[`${Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000)))}%`, 'context used'], [String(v.turns), v.turns === 1 ? 'turn' : 'turns'], [String(v.toolCalls), 'tool calls'], v.agents.length ? [String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents'] : null, [shortModelName(v.model) || '–', v.effort ? `${v.effort} effort` : 'model'], v.startedAt ? [duration(now - v.startedAt), 'running'] : null].filter(Boolean);
   const errors = v.errors ? `<span class="stat err"><b>${v.errors}</b>${v.errors === 1 ? 'error' : 'errors'}</span>` : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2>${iconBtn('close', 'close', 'Close (Esc)')}</div>
-    <div class="meta"><span class="pill ${v.followUp && (v.state === 'idle' || v.state === 'done') ? 'followup' : v.state}">${esc(stateLabel(v.followUp && (v.state === 'idle' || v.state === 'done') ? 'followup' : v.state))}${v.stateSince ? ' · ' + ago(v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
+    <div class="meta"><span class="pill ${ui === 'needs' ? (v.state === 'question' || v.state === 'permission' ? v.state : 'followup') : ui === 'finished' ? 'done' : ui}">${esc(stateLabel(ui === 'needs' && (v.state === 'question' || v.state === 'permission') ? v.state : ui))}${v.stateSince ? ' · ' + ago(ui === 'idle' || ui === 'finished' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince, now) : ''}</span><span class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 36))}</span></div>
     ${msg ? `<div class="state-msg ${v.state}">${esc(msg)}</div>` : ''}
     <div class="stats">${stats.map(([n, l]) => `<span class="stat"><b>${esc(n)}</b>${esc(l)}</span>`).join('')}${errors}</div>`;
   const s = v.summary;
@@ -373,7 +375,7 @@ function toast(v) {
   el.className = `toast ${v.state}`;
   const fu = v.followUp && (v.state === 'idle' || v.state === 'done');
   const msg = fu ? plain(v.followUp.reason) : v.state === 'done' ? clip(plain(v.lastAssistantText) || 'Finished its turn', 120) : plain(v.stateMessage || activityLine(v));
-  el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} ${esc(stateLabel(fu ? 'followup' : v.state))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
+  el.innerHTML = `<div class="t"><span>${esc(v.name || v.id.slice(0, 8))} ${esc(stateLabel(fu ? 'followup' : v.state === 'question' || v.state === 'permission' ? v.state : uiState(v)))}</span><button class="x" title="Dismiss">×</button></div><div class="m" title="${esc(msg)}">${esc(msg)}</div>`;
   el.addEventListener('click', (e) => { if (!e.target.classList.contains('x')) focusSession(v.id); markSeen(v.id); dismissToast(v.id); });
   $('toasts').appendChild(el);
   state.toasts.set(v.id, el);

@@ -117,7 +117,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-vis
 .node.agent text.title { font-size: 12.5px; }
 .node text.sub { fill: var(--text-muted); font-size: 12px; }
 .node.agent text.sub { font-size: 11.5px; }
-.node.question text.sub, .node.permission text.sub { fill: var(--blocking); }
+.node.question text.sub, .node.permission text.sub, .node.followup text.sub { fill: var(--blocking); }
 .node text.foot { font-size: 11px; font-weight: 500; fill: var(--text-muted); }
 .node text.mono { font-family: var(--mono); font-size: 11px; fill: var(--text-muted); }
 .node text.model { fill: var(--text-faint); }
