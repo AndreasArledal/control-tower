@@ -179,7 +179,7 @@ function sessionNode(n, { selected, changed, now }) {
     <text class="sub" x="16" y="${lines[1] ? 58 : 42}">${esc(act)}</text>
     ${model ? `<text class="mono model" x="16" y="${my + 3.5}">${esc(fit(model, n.w - 32, 11))}</text>` : ''}
     ${glyph(footState, 22, fy)}
-    <text class="foot state-${footState}" x="33" y="${fy + 4}">${esc(fit(stateLabel(footState) + (since ? ` · ${since}` : ''), barX - 100, 11.5))}</text>
+    <text class="foot state-${footState}" x="33" y="${fy + 4}">${esc(fit((waiting ? 'needs you' : stateLabel(footState)) + (since ? ` · ${since}` : ''), barX - 90, 11.5))}</text>
     ${v.contextTokens ? `<g class="ctx"><title>Context window used: ${Math.round(pct * 100)}% of ${contextWindow(v.contextTokens) / 1000}k tokens</title><text class="mono" x="${barX - 6}" y="${fy + 3.5}" text-anchor="end">context</text><rect class="ctx-bar" x="${barX}" y="${fy - 2}" width="${barW}" height="4" rx="2"></rect><rect class="ctx-fill ${pct > 0.8 ? 'warn' : ''}" x="${barX}" y="${fy - 2}" width="${Math.max(2, barW * pct)}" height="4" rx="2"></rect><text class="mono" x="${n.w - 12}" y="${fy + 3.5}" text-anchor="end">${Math.round(pct * 100)}%</text></g>` : ''}
     ${pillText ? pill(n.w - 12 - pillW, 18, pillText, live ? 'live' : '') : ''}
   </g>`;

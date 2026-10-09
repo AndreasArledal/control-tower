@@ -24,12 +24,12 @@ Nothing leaves your machine. Radar only reads the files Claude Code already writ
 ## What you get
 
 - **The graph owns the page.** Two thin strips on top (status, project chips), then the canvas. Each session is a node; subagents branch off it, nested agents off their parent. Blue is working, amber is waiting for you (`?` question, `◆` permission, pulsing ring), teal is finished (calm, no pulse), grey is idle. Finished agents fold into one "N more" node after the three most recent.
-- **Project headlines.** Each project gets a one-line "what is this project working on" above its sessions, written by the summariser from its live sessions (or built from session titles when summaries are off). The chips show the worst state in each project and an amber count of sessions needing you. Click a chip for one project, shift-click to add, `All` for everything.
-- **Drawer on demand.** Click a node and a panel slides over the right edge, without reflowing the graph: state, one-line summary, a stat strip, and the live reasoning stream (your prompts, thinking, every tool call with arguments and results, replies). Filter with `t` `u` `r`, follow the tail, load earlier. Click the node again or press `Esc` to close.
-- **Jump to terminal.** The drawer's first action focuses the terminal pane that runs the session: WezTerm, iTerm2, Terminal.app, tmux and kitty are detected from the process tree; anything else gets its app raised. A custom command can be set with the `focusCommand` setting (`{tty}`, `{pid}`, `{cwd}` placeholders).
+- **Project headlines.** Each project gets a one-line "what is this project working on" above its sessions, written by the summariser from its live sessions (or built from session titles when summaries are off). The chips show the worst state in each project and an amber count of sessions needing you. `Active` (the default) shows projects with something going on or used in the last hour, `All` shows everything, click a chip for one project, shift-click to add.
+- **Drawer on demand.** Click a node and a panel slides over the right edge, without reflowing the graph. It leads with the summary: headline, goal, done so far, now, next, and the agents with their latest result, refreshed every few minutes while the session works. Stats (context used, turns, tool calls, model and effort) sit under the title. The transcript is one button away: a story view with your prompts and Claude's replies in full and the tool work folded into one line per step, or the raw log (`r`); thinking on request (`t`). Click the node again or press `Esc` to close.
+- **Forgotten sessions.** Every summary also judges whether the last reply left something with you (a question, options, an approval). Such sessions read "needs you" in amber even when they look idle, count in the badge, and keep their project in Active however old they are, so a session you started and walked away from does not quietly get left.
 - **Copy resume command** (`cd <dir> && claude --resume <id>`) and **recent sessions** per project, so a finished session can be reopened or read.
 - **Needs you**, in the page only: an amber badge in the top bar with the count (flashes once when it grows, click for the list), pulsing rings on the nodes, a slim toast. Press `n` to jump to the next one. A finished session simply reads "finished" until you type again; there is nothing to acknowledge.
-- **Summaries**: Haiku, run through your own `claude` login, writes a headline and progress line for a session when it finishes or needs you, plus the project headlines. Automatic, on request, or off, in settings (`⚙`). About a fifth of a cent per summary.
+- **Summaries**: Haiku, run through your own `claude` login, writes the structured summary for a session when it is first seen, when it finishes or needs you, and every few minutes while it works, plus the project headlines. Automatic, on request, or off, and the refresh interval, in settings. Settings also shows what summaries have cost today and in total, from Claude's own accounting. About a fifth of a cent each.
 - **Menu bar app** (macOS, optional): the same thing in your top bar with the count of sessions that need you.
 
 ## Requirements
@@ -76,7 +76,7 @@ The tray item shows `2 need you` or the number of working sessions, lists sessio
 
 ## Keys
 
-`n` next session that needs you · `f` fit the graph (or toggle follow when the drawer is open) · `Esc` close · `+` `-` zoom · `t` `u` `r` toggle thinking, tools, replies · double-click empty canvas to fit · drag to pan, ⌘/ctrl-wheel to zoom.
+`n` next session that needs you · `f` fit the graph (or toggle follow when the transcript is open) · `Esc` close · `+` `-` zoom · `r` raw transcript · `t` thinking · double-click empty canvas to fit · drag to pan, ⌘/ctrl-wheel to zoom.
 
 ## How it works
 
@@ -89,7 +89,7 @@ Claude Code writes everything Radar needs:
 | `.../<session>/subagents/agent-*.jsonl` + `.meta.json` | Each subagent's transcript, description, type, spawn depth, parent tool call |
 | Hooks (optional) | `UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`, `AskUserQuestion` pre/post, `Subagent*`, `Session*` |
 
-The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step. The design rationale is in `docs/UI-REVAMP.md`.
+The server (`server/`) tails those files incrementally once a second, keeps a small model per transcript, and resolves each session to one state: `working`, `question`, `permission`, `done`, `idle` or `exited`, plus a follow-up flag from the summariser's verdict. Terminal focusing is available on the API (`POST /api/session/<id>/focus`, WezTerm/iTerm2/Terminal.app/tmux/kitty, `focusCommand` setting) but not in the UI, since WezTerm cannot switch workspaces from the CLI. The page (`web/`) is plain HTML, CSS and ES modules, fed by one server-sent-events stream and a small JSON API. No build step. The design rationale is in `docs/UI-REVAMP.md`.
 
 Run the tests with `node --test`.
 
