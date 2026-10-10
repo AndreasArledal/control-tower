@@ -44,16 +44,7 @@ export function plain(s) {
 export function clip(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
 export const STATE_LABEL = { working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'ready', paused: 'ready', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' };
-export const STATE_LONG = { ...{ working: 'working', question: 'has a question', permission: 'needs permission', done: 'finished', idle: 'ready for a new prompt', paused: 'ready for a new prompt', exited: 'ended', running: 'running', followup: 'needs you', needs: 'needs you', finished: 'finished' } };
-export function stateLong(s) { return STATE_LONG[s] ?? stateLabel(s); }
 
-/** The summary's verdict, only if it was written after the last reply it judges. */
-export function verdict(v) {
-  const s = v.summary;
-  if (!s?.status) return null;
-  if ((s.at ?? 0) < (v.lastAssistantAt ?? 0) - 1000) return null;
-  return s.status;
-}
 
 /**
  * The four states the page speaks in, derived from the server's finer ones:
@@ -68,6 +59,15 @@ export function uiState(v) {
   return 'paused';
 }
 export const UI_RANK = { needs: 0, working: 1, paused: 2, exited: 3 };
+export const AGENT_CLASS = { running: 'running', done: 'finished', exited: 'ended' };
+
+/** The timestamp a node and the drawer both show next to the state: when it started asking, when it last replied, or when the state began. */
+export function sinceTs(v) {
+  const ui = uiState(v), blocking = v.state === 'question' || v.state === 'permission';
+  if (ui === 'needs' && v.followUp && !blocking) return v.followUp.since;
+  if (ui === 'paused') return v.lastAssistantAt ?? v.stateSince;
+  return v.stateSince;
+}
 
 /**
  * The whole fleet in one word, for the beacon on the mark, the tab icon and the tray.

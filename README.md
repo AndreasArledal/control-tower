@@ -26,7 +26,7 @@ cd app && npm install      # downloads Electron (about 100 MB), one time
 npm run install-app        # builds Control Tower.app and copies it to /Applications
 ```
 
-The tray item lists sessions in its menu, opens the dashboard in a window, and has a "Start at login" toggle. The app embeds the server, or attaches to a `control-tower` server already running on the port. It borrows your login shell's PATH so `claude` resolves when launched from the Dock. The build is unsigned, so it is meant for the machine it was built on; `npm start` runs it from source instead.
+It is a normal app: it opens its window on launch, closing the window keeps it running, and the Dock icon, ⌘-Tab or the tray item bring it back; ⌘Q quits. The tray item lists sessions in its menu and has "Start at login" and "Menu bar only" toggles, the latter for a pure menu bar presence without a Dock icon. The app embeds the server, or attaches to a `control-tower` server already running on the port. It borrows your login shell's PATH so `claude` resolves when launched from the Dock. The build is unsigned, so it is meant for the machine it was built on; `npm start` runs it from source instead.
 
 ## What you see
 
@@ -78,7 +78,7 @@ Tests: `node --test`. The screenshot above comes from invented sessions, generat
 
 ## Privacy
 
-Control Tower binds to `127.0.0.1` only and rejects cross-origin requests, so other web pages cannot read your sessions or trigger actions. Transcripts are read from disk and served only to the page. Summaries send a bounded digest (prompts, last reply, recent tool names) to Anthropic through your own Claude login, the same place the session itself runs.
+Control Tower binds to `127.0.0.1` only and rejects cross-origin requests, so other web pages cannot read your sessions or trigger actions. Transcripts are read from disk and served only to the page. Summaries send a bounded digest (prompts, last reply, recent tool names) to Anthropic through your own Claude login, the same place the session itself runs. That digest is untrusted text, so the summarizer runs with no tools and a single turn: the worst a malicious transcript can do is produce a wrong summary.
 
 ## Roadmap
 

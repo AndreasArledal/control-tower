@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { TowerStore } from '../server/store.mjs';
 import { encodeProjectDir } from '../server/paths.mjs';
+import { mergeHooks } from '../server/hooks-install.mjs';
 
 const L = (o) => JSON.stringify(o) + '\n';
 const base = (sid, i) => ({ uuid: 'u' + i, parentUuid: i ? 'u' + (i - 1) : null, timestamp: new Date(1_700_000_000_000 + i * 1000).toISOString(), sessionId: sid, isSidechain: false, cwd: '/p/a' });
@@ -249,5 +250,63 @@ test('a state change while a summary is in flight is summarised again once that 
   const mine = requests.filter((r) => r.id === sid);
   assert.equal(mine.length, 2, 're-requested when the run finished');
   assert.match(mine[1].key, /:done$/);
+  store.stop();
+});
+
+test('exited sessions expire after the TTL and sessions that were never live are dropped at once', async () => {
+  const { home, sid } = fakeHome();
+  const store = new TowerStore({ home, summarizer: null });
+  let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
+  await store.tick();
+  assert.equal(store.snapshot().sessions[0].alive, true);
+  unlinkSync(join(home, 'sessions', `${process.pid}.json`)); // the CLI exited
+  clock += 1000; await store.tick();
+  assert.equal(store.snapshot().sessions[0].alive, false);
+  clock += 6 * 60 * 60 * 1000 - 5000; await store.tick();
+  assert.ok(store.sessions.has(sid), 'still listed just inside the TTL');
+  clock += 10_000; await store.tick();
+  assert.ok(!store.sessions.has(sid), 'gone after the TTL');
+  store._session('ghost'); await store.tick();
+  assert.ok(!store.sessions.has('ghost'), 'a record that never went live and has no pid is dropped');
+  store.stop();
+});
+
+test('the snapshot is only rebuilt when something could have changed; seen still forces a push', async () => {
+  const { home, sid, transcript } = fakeHome();
+  const store = new TowerStore({ home, summarizer: null });
+  let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
+  let builds = 0; const real = store.snapshot.bind(store); store.snapshot = () => { builds++; return real(); };
+  let changes = 0; store.on('change', () => changes++);
+  await store.tick();
+  const after1 = builds; assert.ok(after1 >= 1); assert.equal(changes, 1);
+  clock += 1000; await store.tick();
+  assert.equal(builds, after1, 'nothing changed: no snapshot built');
+  appendFileSync(transcript, L({ ...base(sid, 3), type: 'assistant', message: { id: 'm9', role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done.' }] } }));
+  clock += 1000; await store.tick();
+  assert.ok(builds > after1, 'a new transcript line rebuilds the snapshot');
+  assert.equal(changes, 2);
+  const after2 = builds;
+  store.markSeen(sid); clock += 1000; await store.tick();
+  assert.ok(builds > after2, 'marking seen rebuilds');
+  assert.equal(changes, 3, 'and pushes a change even though the views look the same');
+  store.stop();
+});
+
+test('hooksInstalled is read asynchronously and cached, refreshed on demand and every few seconds', async () => {
+  const { home } = fakeHome();
+  const store = new TowerStore({ home, summarizer: null });
+  let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
+  await store.tick();
+  assert.equal(store.snapshot().hooksInstalled, false);
+  writeFileSync(join(home, 'settings.json'), JSON.stringify(mergeHooks({}, '/x/control-tower/hook.sh')));
+  assert.equal(store.snapshot().hooksInstalled, false, 'cached until refreshed');
+  assert.equal(typeof store.refreshHooks, 'function');
+  await store.refreshHooks();
+  assert.equal(store.snapshot().hooksInstalled, true);
+  writeFileSync(join(home, 'settings.json'), '{}');
+  clock += 1000; await store.tick();
+  assert.equal(store.snapshot().hooksInstalled, true, 'not re-read on every tick');
+  clock += 15_000; await store.tick();
+  assert.equal(store.snapshot().hooksInstalled, false, 're-read after the interval');
   store.stop();
 });

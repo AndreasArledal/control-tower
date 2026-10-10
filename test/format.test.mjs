@@ -25,3 +25,12 @@ test('fleetState: a lost connection outranks everything', () => {
   const off = fleetState({ sessions: [session({ needsYou: true })] }, false);
   assert.equal(off.state, 'offline'); assert.match(off.label, /Connection lost/);
 });
+
+test('sinceTs picks the timestamp a node and the drawer both show for a state', async () => {
+  const { sinceTs, AGENT_CLASS } = await import('../web/format.js');
+  assert.equal(sinceTs({ alive: true, state: 'question', stateSince: 5, lastAssistantAt: 9 }), 5, 'blocking: when it started asking');
+  assert.equal(sinceTs({ alive: true, state: 'idle', followUp: { since: 7, seen: false }, stateSince: 5, lastAssistantAt: 9 }), 7, 'unseen follow-up: when it asked');
+  assert.equal(sinceTs({ alive: true, state: 'done', stateSince: 5, lastAssistantAt: 9 }), 9, 'ready: the last reply');
+  assert.equal(sinceTs({ alive: true, state: 'working', stateSince: 5, lastAssistantAt: 9 }), 5);
+  assert.deepEqual(AGENT_CLASS, { running: 'running', done: 'finished', exited: 'ended' });
+});

@@ -1,24 +1,26 @@
 import { EventEmitter } from 'node:events';
 import { readdir, readFile, stat, unlink, mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { readRegistry } from './registry.mjs';
 import { TranscriptTailer } from './transcript.mjs';
-import { SessionModel, resolveState, resolveAgentState } from './model.mjs';
+import { SessionModel } from './model.mjs';
 import { normalizeHookEvent, applyHookEvent, emptyHookState } from './hook-events.mjs';
 import { hasTowerHooks } from './hooks-install.mjs';
-import { transcriptPathFor, projectsDir, towerDir } from './paths.mjs';
+import { transcriptPathFor, towerDir } from './paths.mjs';
 import { buildDigest, buildProjectDigest } from './summarizer.mjs';
 import { focusProcess } from './focus.mjs';
+import { agentOwningTool, agentView, resolve, sessionView, buildSnapshot } from './view.mjs';
+import { history, openHistory } from './history.mjs';
 
 const ATTENTION = new Set(['question', 'permission', 'done']);
 const EXITED_TTL_MS = 6 * 60 * 60 * 1000;
 const SUMMARY_COOLDOWN_MS = 20_000;
 const DEFAULT_REFRESH_MIN = 4;
-const ACTIVE_WINDOW_MS = 60 * 60 * 1000;
-const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 const MAX_ENTRIES = 8000, KEEP_ENTRIES = 6000;
+const SEEN_MAX = 200;
+const HOOKS_CHECK_MS = 10_000;
 
 /** Append parsed entries to a record, stamping a stable seq and bounding memory for very long transcripts. */
 function pushEntries(rec, fresh) {
@@ -59,7 +61,8 @@ export class TowerStore extends EventEmitter {
     this.projectSummaries = new Map(); // cwd -> { headline, at, key }
     this.seen = new Map(); // sessionId -> stateSince the user has looked at
     this._now = () => Date.now();
-    this._timer = null; this._version = ''; this.hooksSeen = false; this.ticking = false; this.lastTickAt = null;
+    this._timer = null; this._version = ''; this._fp = null; this.hooksSeen = false; this.ticking = false; this.lastTickAt = null;
+    this._hooksInstalled = false; this._hooksCheckedAt = 0;
   }
 
   async start({ intervalMs = 1000 } = {}) {
@@ -71,9 +74,17 @@ export class TowerStore extends EventEmitter {
 
   stop() { if (this._timer) clearInterval(this._timer); this._timer = null; }
 
-  hooksInstalled() {
-    try { return hasTowerHooks(JSON.parse(require_sync(join(this.home, 'settings.json')))); } catch { return false; }
+  /** Hook status is a file read, so it is cached: refreshed every few seconds in tick() and on demand after install/uninstall. */
+  async refreshHooks() {
+    this._hooksCheckedAt = this._now();
+    let installed = false;
+    try { installed = hasTowerHooks(JSON.parse(await readFile(join(this.home, 'settings.json'), 'utf8'))); } catch { /* no settings, or unparseable: not installed */ }
+    this._hooksInstalled = installed;
   }
+  hooksInstalled() { return this._hooksInstalled; }
+
+  /** Force the next tick to rebuild and push a snapshot even if nothing in the records changed (seen, settings, summaries). */
+  _dirty() { this._version = ''; this._fp = null; }
 
   async tick() {
     if (this.ticking) return; this.ticking = true;
@@ -84,6 +95,7 @@ export class TowerStore extends EventEmitter {
         await this._pollTranscript(s);
         if (s.alive || !s.loaded) await this._pollAgents(s);
       }
+      if (this._now() - this._hooksCheckedAt > HOOKS_CHECK_MS) await this.refreshHooks();
       this._expire();
       this._deriveAndNotify();
       this.lastTickAt = this._now();
@@ -206,101 +218,36 @@ export class TowerStore extends EventEmitter {
     }
   }
 
-  /** Which agent (or null for the main transcript) issued a given tool_use id. */
-  _agentOwningTool(s, toolUseId) {
-    if (!toolUseId) return null;
-    if (s.model.toolUseIds.has(toolUseId)) return null;
-    for (const a of s.agents.values()) if (a.model.toolUseIds.has(toolUseId)) return a.id;
-    return null;
-  }
-
-  _agentView(s, a) {
-    const toolUseId = a.meta.toolUseId ?? null;
-    const parentAgentId = this._agentOwningTool(s, toolUseId);
-    const parentModel = parentAgentId ? s.agents.get(parentAgentId)?.model : s.model;
-    // a background agent's tool_use resolves immediately with "launched", so only a foreground result means finished
-    const background = a.meta.requestShape === 'background';
-    const parentHasResult = !background && Boolean(toolUseId && parentModel?.resultIds.has(toolUseId));
-    const stopped = a.state === 'done' || s.hooks.stoppedAgents.has(a.id) || Boolean(parentModel?.agentNotices.has(a.id));
-    const state = resolveAgentState({ model: a.model, parentHasResult, stopped, sessionAlive: s.alive });
-    if (state === 'done') a.endedAt = Math.max(a.endedAt ?? 0, a.model.lastActivityAt ?? 0) || this._now();
-    const spawn = parentModel?.agentSpawns.get(toolUseId);
-    const act = a.model.activity();
-    return {
-      id: a.id, parentAgentId, toolUseId,
-      description: a.meta.description || spawn?.description || a.model.title,
-      type: a.meta.agentType || spawn?.type || 'agent', isFork: Boolean(a.meta.isFork), depth: a.meta.spawnDepth ?? 1,
-      background: a.meta.requestShape === 'background', model: a.model.model || (a.meta.model && a.meta.model !== 'inherit' ? a.meta.model : null), effort: a.model.effort,
-      state, activity: state === 'running' ? act : { kind: 'idle', label: '', since: a.endedAt },
-      startedAt: a.startedAt, endedAt: a.endedAt, lastActivityAt: a.model.lastActivityAt,
-      toolCalls: a.model.toolCalls, turns: a.model.turns, contextTokens: a.model.contextTokens, errors: a.model.errors,
-      lastText: clip(a.model.lastAssistantText, 300), entryCount: a.entries.length,
-    };
-  }
-
-  _sessionView(s) {
+  /**
+   * Cheap digest of everything a snapshot could differ on, read from the records before any view is built.
+   * The minute bucket keeps time-driven changes (active window, summary staleness) flowing at least once a minute.
+   */
+  _fingerprint() {
     const now = this._now();
-    const m = s.model;
-    let attention = s.hooks.attention && s.alive ? s.hooks.attention : null;
-    // a notification without a tool name can arrive while the transcript already shows the pending question
-    if (attention?.kind === 'permission' && m.pendingQuestion) attention = { ...attention, kind: 'question', message: m.pendingQuestion.text };
-    const doneAt = s.hooks.doneAt ?? s.flipDoneAt;
-    const r = resolveState({ alive: s.alive, busy: s.busy, doneAt, lastPromptAt: Math.max(m.lastPromptAt ?? 0, s.hooks.lastPromptAt ?? 0) || null, attention, pendingQuestion: m.pendingQuestion, lastActivityAt: m.lastActivityAt, now });
-    const agents = [...s.agents.values()].map((a) => this._agentView(s, a)).sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
-    const act = r.state === 'working' ? m.activity() : (r.state === 'question' ? { kind: 'question', label: r.message ?? '', since: r.since } : { kind: 'idle', label: '', since: r.since });
-    // the summarizer's verdict: the last reply left a question or decision with the user, so this session is not finished even if it looks idle
-    const judgedWaiting = s.alive && (r.state === 'idle' || r.state === 'done') && s.summary?.status === 'waiting_for_user' && (s.summary.at ?? 0) >= (m.lastAssistantAt ?? 0) - 1000;
-    // a follow-up is a soft signal: once the user has looked at it, it stops counting (blocking prompts never stop counting)
-    const followUpSince = m.lastAssistantAt ?? s.summary?.at ?? null;
-    const followUp = judgedWaiting ? { reason: s.summary.waitingFor || s.summary.next || 'Waiting for your reply', since: followUpSince, seen: (this.seen.get(s.id) ?? -1) >= (followUpSince ?? 0) } : null;
-    return {
-      id: s.id, pid: s.pid, name: s.name, title: m.title, cwd: s.cwd, projectId: s.cwd, alive: s.alive, kind: s.kind,
-      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: r.state === 'question' || r.state === 'permission' || Boolean(followUp && !followUp.seen), followUp,
-      activity: act, lastPrompt: clip(m.lastPrompt, 400), lastPromptAt: m.lastPromptAt, firstPrompt: clip(m.firstPrompt, 400),
-      lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
-      lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
-      contextTokens: m.contextTokens, outputTokens: m.outputTokens, model: m.model, effort: m.effort, thinkingChars: m.thinkingChars, entryCount: s.entries.length,
-      hooksSeen: s.hooksSeen, pinned: s.pinned, summary: s.summary, summaryError: s.summaryError, summarizing: Boolean(this.summarizer?.isQueued(s.id)),
-      agents, runningAgents: agents.filter((a) => a.state === 'running').length,
-    };
+    const parts = [Math.floor(now / 60_000), this.settings.summaries, this.settings.summaryRefreshMinutes, this.hooksSeen, this._hooksInstalled];
+    for (const s of this.sessions.values()) {
+      if (!s.cwd) continue;
+      const r = this._resolve(s, now);
+      parts.push(s.id, s.alive, s.busy, r.state, s.model.count, r.state === 'working' ? s.model.activity().label : '', s.summary?.at ?? 0, s.summaryError ?? '', Boolean(this.summarizer?.isQueued(s.id)), s.pinned, s.hooks.stoppedAgents.size);
+      for (const a of s.agents.values()) parts.push(a.id, a.state, a.model.count, a.model.lastStopReason, a.model.pendingTools.size, a.meta.toolUseId ?? '');
+    }
+    return JSON.stringify(parts);
   }
 
-  snapshot() {
-    const sessions = [...this.sessions.values()].filter((s) => s.cwd).map((s) => this._sessionView(s))
-      .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
-    const byProject = new Map();
-    for (const v of sessions) {
-      let p = byProject.get(v.cwd);
-      if (!p) { p = { id: v.cwd, path: v.cwd, name: basename(v.cwd) || v.cwd, sessions: [], counts: {}, live: 0, needsYou: 0, lastActivityAt: 0, state: 'idle' }; byProject.set(v.cwd, p); }
-      p.sessions.push(v.id);
-      p.counts[v.state] = (p.counts[v.state] ?? 0) + 1;
-      if (v.alive) p.live++;
-      if (v.needsYou) p.needsYou++;
-      p.lastActivityAt = Math.max(p.lastActivityAt, v.lastActivityAt ?? 0);
-    }
-    const rank = { question: 5, permission: 5, done: 4, working: 3, idle: 2, exited: 1 };
-    for (const p of byProject.values()) {
-      p.state = Object.keys(p.counts).sort((a, b) => rank[b] - rank[a])[0] ?? 'idle';
-      const mine = sessions.filter((v) => v.cwd === p.id);
-      p.runningAgents = mine.reduce((n, v) => n + v.runningAgents, 0);
-      const ps = this.projectSummaries.get(p.id);
-      p.headline = ps?.headline || fallbackHeadline(mine);
-      p.headlineSource = ps ? 'summary' : 'titles';
-      // active: something is happening, or someone touched it recently
-      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || (v.followUp && !v.followUp.seen) || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
-    }
-    const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
-    const attention = sessions.filter((v) => v.needsYou || v.followUp).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
-      .map((v) => { const blocking = v.state === 'question' || v.state === 'permission'; const since = blocking ? v.stateSince : v.followUp.since; return { sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: blocking ? v.state : 'followup', since, message: blocking ? v.stateMessage : v.followUp.reason, seen: (this.seen.get(v.id) ?? -1) >= (since ?? 0) }; });
-    const unseen = attention.filter((a) => !a.seen).length;
-    return {
-      generatedAt: this._now(), hooksSeen: this.hooksSeen, hooksInstalled: this.hooksInstalled(),
-      summaries: { mode: this.settings.summaries, available: this.summarizer ? this.summarizer.available : false, lastError: this.summarizer?.lastError ?? null, spend: this.summarizer?.spend ?? null, refreshMinutes: this.settings.summaryRefreshMinutes },
-      projects, sessions, attention, unseen,
-    };
-  }
+  _agentOwningTool(s, toolUseId) { return agentOwningTool(s, toolUseId); }
+  _agentView(s, a) { return agentView(this, s, a); }
+  _resolve(s, now = this._now()) { return resolve(s, now); }
+  _sessionView(s) { return sessionView(this, s); }
+  snapshot() { return buildSnapshot(this); }
+  /** Recent transcripts for a project dir, for browsing sessions that are no longer running. */
+  async history(cwd, limit = 20) { return history(this, cwd, limit); }
+  /** Load a finished session on demand so its timeline can be read. */
+  async openHistory(cwd, id) { return openHistory(this, cwd, id); }
 
   _deriveAndNotify() {
+    const fp = this._fingerprint();
+    if (fp === this._fp) return;
+    this._fp = fp;
     const snap = this.snapshot();
     for (const p of snap.projects) this._maybeSummarizeProject(p, snap.sessions.filter((v) => v.cwd === p.id));
     for (const v of snap.sessions) {
@@ -355,22 +302,24 @@ export class TowerStore extends EventEmitter {
   }
 
   onSummary(id, summary, key) {
-    if (id.startsWith('project:')) { this.projectSummaries.set(id.slice(8), { ...summary, key }); this._version = ''; this.emit('change', this.snapshot()); return; }
+    if (id.startsWith('project:')) { this.projectSummaries.set(id.slice(8), { ...summary, key }); this._dirty(); this.emit('change', this.snapshot()); return; }
     const s = this.sessions.get(id); if (!s) return;
-    s.summary = summary; s.summaryKey = key; s.summaryError = null; this._version = ''; this.emit('change', this.snapshot());
+    s.summary = summary; s.summaryKey = key; s.summaryError = null; this._dirty(); this.emit('change', this.snapshot());
     if (s.summaryWanted && s.summaryWanted !== key) { s.summaryWanted = null; this.requestSummary(id, { afterRun: true }); }
   }
 
   onSummaryError(id, err) {
     const s = this.sessions.get(id); if (!s) return;
-    s.summaryError = err.message; this._version = ''; this.emit('change', this.snapshot());
+    s.summaryError = err.message; this._dirty(); this.emit('change', this.snapshot());
   }
 
   /** The user has looked at this session's current attention state; it leaves the badge until the state changes again. */
   markSeen(id) {
     const s = this.sessions.get(id); if (!s) return false;
     const v = this._sessionView(s);
-    this.seen.set(id, Math.max(v.stateSince ?? 0, v.followUp?.since ?? 0) || this._now()); this._version = ''; this._saveState();
+    this.seen.set(id, Math.max(v.stateSince ?? 0, v.followUp?.since ?? 0) || this._now());
+    while (this.seen.size > SEEN_MAX) this.seen.delete(this.seen.keys().next().value);
+    this._dirty(); this._saveState();
     return true;
   }
 
@@ -381,7 +330,7 @@ export class TowerStore extends EventEmitter {
     return focusProcess({ pid: s.pid, cwd: s.cwd, custom: this.settings.focusCommand || null });
   }
 
-  setSettings(patch) { this.settings = { ...this.settings, ...patch }; this._saveState(); this._version = ''; }
+  setSettings(patch) { this.settings = { ...this.settings, ...patch }; this._saveState(); this._dirty(); }
 
   timeline(sessionId, agentId, { after = -1, limit = 200, before = null } = {}) {
     const s = this.sessions.get(sessionId); if (!s) return null;
@@ -393,38 +342,6 @@ export class TowerStore extends EventEmitter {
     else if (after < 0) entries = all.slice(Math.max(0, all.length - limit));
     else { const start = all.findIndex((e) => e.seq > after); entries = start < 0 ? [] : all.slice(start, start + limit); }
     return { total: rec.seq, entries, hasMore: entries.length ? entries[0].seq > (all[0]?.seq ?? 0) : false };
-  }
-
-  /** Recent transcripts for a project dir, for browsing sessions that are no longer running. */
-  async history(cwd, limit = 20) {
-    const dir = join(projectsDir(this.home), cwd.replace(/[^a-zA-Z0-9]/g, '-'));
-    let files = [];
-    try { files = (await readdir(dir)).filter((f) => f.endsWith('.jsonl')); } catch { return []; }
-    const out = [];
-    for (const f of files) {
-      const id = f.replace(/\.jsonl$/, '');
-      let st; try { st = await stat(join(dir, f)); } catch { continue; }
-      out.push({ id, modified: st.mtimeMs, size: st.size, live: this.sessions.get(id)?.alive ?? false });
-    }
-    out.sort((a, b) => b.modified - a.modified);
-    const top = out.slice(0, limit);
-    for (const h of top) {
-      const known = this.sessions.get(h.id);
-      if (known) { h.title = known.model.title; h.turns = known.model.turns; continue; }
-      const m = await peekTranscript(join(dir, `${h.id}.jsonl`));
-      Object.assign(h, m);
-    }
-    return top;
-  }
-
-  /** Load a finished session on demand so its timeline can be read. */
-  async openHistory(cwd, id) {
-    if (this.sessions.has(id)) return this.sessions.get(id);
-    const s = this._session(id);
-    s.cwd = cwd; s.transcriptPath = transcriptPathFor(this.home, cwd, id); s.alive = false; s.lastSeenAliveAt = this._now(); s.pinned = true;
-    await this._pollTranscript(s); await this._pollAgents(s); s.loaded = true;
-    this._version = '';
-    return s;
   }
 
   async _loadState() {
@@ -441,36 +358,3 @@ export class TowerStore extends EventEmitter {
   }
 }
 
-/** Without a model: one title, or "N sessions: a, b". */
-function fallbackHeadline(sessions) {
-  const live = sessions.filter((v) => v.alive);
-  const pick = (live.length ? live : sessions).slice(0, 3);
-  if (!pick.length) return '';
-  if (pick.length === 1) return pick[0].title;
-  return pick.map((v) => clip(v.title, 40)).join(' · ');
-}
-
-import { readFileSync } from 'node:fs';
-function require_sync(p) { return readFileSync(p, 'utf8'); }
-
-async function peekTranscript(path) {
-  const { parseLine } = await import('./transcript.mjs');
-  const m = new SessionModel();
-  try {
-    const fh = await (await import('node:fs/promises')).open(path, 'r');
-    try {
-      const buf = Buffer.alloc(256 * 1024);
-      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
-      const lines = buf.toString('utf8', 0, bytesRead).split('\n');
-      lines.pop();
-      lines.forEach((raw, i) => { for (const e of parseLine(raw, i)) m.ingest(e); });
-      const st = await stat(path);
-      if (st.size > buf.length) { // titles land at the end; peek the tail too
-        const tail = Buffer.alloc(64 * 1024);
-        const r = await fh.read(tail, 0, tail.length, st.size - tail.length);
-        for (const raw of tail.toString('utf8', 0, r.bytesRead).split('\n')) { if (raw.includes('"ai-title"')) for (const e of parseLine(raw, 0)) if (e.kind === 'title') m.ingest(e); }
-      }
-    } finally { await fh.close(); }
-  } catch { /* unreadable */ }
-  return { title: m.title, firstPrompt: clip(m.firstPrompt, 200), turns: m.turns, created: m.firstActivityAt };
-}

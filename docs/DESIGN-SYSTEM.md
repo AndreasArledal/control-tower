@@ -282,6 +282,8 @@ Centred, max-width 360: title l/500 `--text`, body m `--text-2`, `code` in `--su
 
 **Seen.** A needs-you item is seen when its node is opened, its toast is clicked, it is picked from the needs-you list, or its project chip is clicked exclusively. There is no button. For a blocking prompt, seen only affects the status-line dot, the toast and the list row tint: the terminal is still stuck, so it keeps counting. For a follow-up, seen means read: it leaves the count and the Active rule, moves under the list's "seen" divider, and its node returns to ready with an "Asked you: …" line. A new ask from the same session is a new item, unseen again. Marking seen never animates anything.
 
+**What moves a row.** Sessions keep their first-seen order within a project; urgency is shown by colour, not position. New sessions append at the bottom of their project.
+
 **What moves the canvas.** Only: fit (`f`, double-click, button), filter change, opening a session that is off-screen (from `n`, the list, a toast, or recent sessions), and zoom. **Never:** snapshot refresh, selection, seen, drawer open/close, agent state change, fold expand (nodes insert in place; the user pans).
 
 **Keyboard.** `n` opens the next unseen needs-you session directly (cycles; the list is mouse-only). `f` fit, always. `Shift+F` follow. `+`/`-` zoom. `e` toggle ended. `1`-`9` pick the nth project, `0` Active. `t` thinking, `r` story/raw (drawer open). `Enter`/`Space` on a focused node opens it; `Tab` walks nodes. `Esc` as above.

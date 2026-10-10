@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { toolLabel } from './model.mjs';
 
+const CACHE_MAX = 500;
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
 
 export const SUMMARY_SCHEMA = {
@@ -23,7 +24,7 @@ export const SUMMARY_SCHEMA = {
 export const SYSTEM_PROMPT = 'You write status-board summaries of AI coding sessions for the engineer who runs them, who has several running at once and wants to know what is going on and how far along each one is. Be concrete: name files, features, decisions, numbers. Plain language, no filler, never mention that you are summarizing. Judge status from the last reply only; earlier replies are context. Answer only with the requested JSON.';
 
 /** Compact, bounded text digest of one session for the summarizer model. */
-export function buildDigest(view, entries, agentEntries = []) {
+export function buildDigest(view, entries) {
   const prompts = entries.filter((e) => e.kind === 'prompt').slice(-5).map((e) => '- ' + clip(e.text, 400));
   const replies = entries.filter((e) => e.kind === 'text' && e.text?.trim()).slice(-3).map((e) => '- ' + clip(e.text, 700));
   const lastReply = replies.pop();
@@ -115,7 +116,7 @@ export class Summarizer {
 
   async persist() {
     if (!this.cacheFile) return;
-    const entries = [...this.cache.entries()].slice(-500);
+    const entries = [...this.cache.entries()].slice(-CACHE_MAX);
     try { await writeFile(this.cacheFile, JSON.stringify({ __spend: this.spend, ...Object.fromEntries(entries) })); } catch { /* best effort */ }
   }
 
@@ -153,6 +154,7 @@ export class Summarizer {
       if (!sum) throw new Error(out?.result ? String(out.result).slice(0, 200) : 'empty summary');
       const stamped = { ...sum, at: Date.now() };
       this.cache.set(job.key, stamped); this.lastRunAt.set(job.id, Date.now()); this.lastError = null;
+      while (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value);
       this.onResult(job.id, stamped, job.key);
       this.persist();
     } catch (err) {

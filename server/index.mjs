@@ -2,6 +2,9 @@ import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { join, normalize, extname } from 'node:path';
 
+/** Session ids are UUID-like; anything else never reaches the filesystem. */
+const SESSION_ID = /^[\w-]{1,128}$/;
+
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 
 function json(res, status, body) {
@@ -58,9 +61,13 @@ export function createTowerServer({ store, webDir, hooksCtl }) {
           return json(res, 200, await store.focus(id));
         }
         if (p === '/api/settings') { store.setSettings(await readBody(req)); return json(res, 200, store.settings); }
-        if (p === '/api/history/open') { const b = await readBody(req); await store.openHistory(b.cwd, b.id); return json(res, 200, { ok: true }); }
-        if (p === '/api/hooks/install') return json(res, 200, await hooksCtl.install());
-        if (p === '/api/hooks/uninstall') return json(res, 200, await hooksCtl.uninstall());
+        if (p === '/api/history/open') {
+          const b = await readBody(req);
+          if (!SESSION_ID.test(String(b.id ?? '')) || typeof b.cwd !== 'string') return json(res, 400, { error: 'invalid session id or cwd' });
+          await store.openHistory(b.cwd, b.id); return json(res, 200, { ok: true });
+        }
+        if (p === '/api/hooks/install') { const r = await hooksCtl.install(); await store.refreshHooks?.(); return json(res, 200, r); }
+        if (p === '/api/hooks/uninstall') { const r = await hooksCtl.uninstall(); await store.refreshHooks?.(); return json(res, 200, r); }
         return json(res, 404, { error: 'no such action' });
       }
       if (p === '/api/hooks') return json(res, 200, await hooksCtl.status());

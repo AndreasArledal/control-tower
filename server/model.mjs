@@ -1,5 +1,8 @@
 const TITLE_MAX = 60;
 const WORKING_GRACE_MS = 4000;
+/** Ids kept for tool-result and agent-parent matching. High, because an agent's parent tool call can be old, but bounded for multi-day sessions. */
+export const MAX_TRACKED_IDS = 20_000;
+function bound(col) { while (col.size > MAX_TRACKED_IDS) col.delete(col.keys().next().value); }
 
 export function shortTitle(text) {
   const t = (text || '').replace(/\s+/g, ' ').trim();
@@ -102,19 +105,19 @@ export class SessionModel {
         break;
       case 'tool_use':
         this.toolCalls++;
-        this.toolUseIds.add(e.tool.id);
+        this.toolUseIds.add(e.tool.id); bound(this.toolUseIds);
         this.pendingTools.set(e.tool.id, { name: e.tool.name, input: e.tool.input, ts: e.ts, i: e.i });
-        if (e.tool.name === 'Agent') this.agentSpawns.set(e.tool.id, { description: e.tool.input?.description ?? '', type: e.tool.input?.subagent_type ?? null, ts: e.ts });
+        if (e.tool.name === 'Agent') { this.agentSpawns.set(e.tool.id, { description: e.tool.input?.description ?? '', type: e.tool.input?.subagent_type ?? null, ts: e.ts }); bound(this.agentSpawns); }
         break;
       case 'notice': {
         // background agents report back through a task notification in the parent transcript
         const m = /<task-id>([a-z0-9]+)<\/task-id>[\s\S]*?<status>(\w+)<\/status>/.exec(e.text || '');
-        if (m) this.agentNotices.set(m[1], m[2]);
+        if (m) { this.agentNotices.set(m[1], m[2]); bound(this.agentNotices); }
         break;
       }
       case 'tool_result':
         this.pendingTools.delete(e.result.toolUseId);
-        this.resultIds.add(e.result.toolUseId);
+        this.resultIds.add(e.result.toolUseId); bound(this.resultIds);
         if (e.result.isError) this.errors++;
         break;
       default: break;

@@ -77,3 +77,18 @@ test('resolveAgentState: done on end_turn, parent result or hook stop; exited wi
   m.ingest(e('text', { text: 'Report', stopReason: 'end_turn' }, 2));
   assert.equal(resolveAgentState({ model: m, parentHasResult: false, stopped: false, sessionAlive: true }), 'done');
 });
+
+test('id bookkeeping stays bounded over a very long transcript, keeping the newest ids', () => {
+  const m = new SessionModel();
+  const N = 25_000;
+  for (let i = 0; i < N; i++) {
+    m.ingest(e('tool_use', { tool: { id: 't' + i, name: i % 50 === 0 ? 'Agent' : 'Read', input: { description: 'd', file_path: 'f' } } }, 2 * i));
+    m.ingest(e('tool_result', { result: { toolUseId: 't' + i, text: 'ok', isError: false } }, 2 * i + 1));
+  }
+  assert.ok(m.toolUseIds.size <= 20_000, `toolUseIds ${m.toolUseIds.size}`);
+  assert.ok(m.resultIds.size <= 20_000, `resultIds ${m.resultIds.size}`);
+  assert.ok(m.agentSpawns.size <= 20_000, `agentSpawns ${m.agentSpawns.size}`);
+  assert.ok(m.toolUseIds.has('t' + (N - 1)), 'newest id kept');
+  assert.ok(!m.toolUseIds.has('t0'), 'oldest id dropped');
+  assert.equal(m.toolCalls, N);
+});

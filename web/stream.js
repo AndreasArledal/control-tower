@@ -2,6 +2,8 @@ import { esc, ago, clip, plain } from './format.js';
 const TOOL_CLASS = { Write: 'cat-write', Edit: 'cat-write', Agent: 'cat-agent' };
 
 const ARG_MAX = 900, RESULT_MAX = 1500;
+/** The page keeps a bounded window of the open transcript; older lines come back through "Load earlier". */
+const ENTRIES_MAX = 3000, ENTRIES_KEEP = 2000;
 
 /** One line that says what a tool call did, from the user's point of view. */
 function stepLabel(e) {
@@ -90,6 +92,8 @@ export class StreamView {
   constructor({ listEl, scrollEl, earlierBtn, api, onOpenAgent }) {
     this.list = listEl; this.scroll = scrollEl; this.earlier = earlierBtn; this.api = api; this.onOpenAgent = onOpenAgent;
     this.key = null; this.entries = []; this.lastSeq = -1; this.firstSeq = null; this.follow = true; this.timer = null;
+    // no polling for a tab nobody is looking at
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this._stopTimer(); else if (this.key) { this.pull(false); this._startTimer(); } });
     this.mode = 'story'; this.showThinking = false; this.agentByTool = new Map(); this.group = null; this.stepByTool = new Map();
     this.earlier.addEventListener('click', () => this.loadEarlier());
     this.list.addEventListener('click', (ev) => {
@@ -122,19 +126,23 @@ export class StreamView {
     this.key = key; this.sessionId = sessionId; this.agentId = agentId; this.entries = []; this.lastSeq = -1; this.firstSeq = null;
     this.list.innerHTML = ''; this.earlier.hidden = true; this.group = null; this.stepByTool = new Map();
     await this.pull(true);
+    if (this.key !== key) return; // switched again while loading
     this.setFollow(true);
-    clearInterval(this.timer);
-    this.timer = setInterval(() => this.pull(false), 1000);
+    if (!document.hidden) this._startTimer();
   }
 
-  close() { clearInterval(this.timer); this.timer = null; this.key = null; }
+  _startTimer() { clearInterval(this.timer); this.timer = setInterval(() => this.pull(false), 1000); }
+  _stopTimer() { clearInterval(this.timer); this.timer = null; }
+  close() { this._stopTimer(); this.key = null; }
 
   async pull(initial) {
-    if (!this.key) return;
+    const key = this.key;
+    if (!key) return;
     const q = new URLSearchParams({ session: this.sessionId, limit: initial ? 200 : 400 });
     if (this.agentId) q.set('agent', this.agentId);
     if (!initial) q.set('after', String(this.lastSeq));
     const r = await this.api(`/api/timeline?${q}`);
+    if (this.key !== key) return; // a different transcript was opened while this fetch was in flight
     if (!r || !r.entries) return;
     const fresh = r.entries.filter((e) => e.seq > this.lastSeq);
     if (initial) { this.firstSeq = r.entries.length ? r.entries[0].seq : 0; this.earlier.hidden = !r.hasMore; }
@@ -142,13 +150,20 @@ export class StreamView {
     for (const e of fresh) this.lastSeq = Math.max(this.lastSeq, e.seq);
     this.entries.push(...fresh);
     this.append(fresh);
+    if (this.entries.length > ENTRIES_MAX) {
+      this.entries.splice(0, this.entries.length - ENTRIES_KEEP);
+      this.firstSeq = this.entries[0].seq; this.earlier.hidden = false;
+      this.render();
+    }
   }
 
   async loadEarlier() {
     if (this.firstSeq == null || this.firstSeq <= 0) { this.earlier.hidden = true; return; }
     const q = new URLSearchParams({ session: this.sessionId, before: String(this.firstSeq), limit: 200 });
     if (this.agentId) q.set('agent', this.agentId);
+    const key = this.key;
     const r = await this.api(`/api/timeline?${q}`);
+    if (this.key !== key) return;
     if (!r?.entries?.length) { this.earlier.hidden = true; return; }
     const keep = this.scroll.scrollHeight;
     this.entries.unshift(...r.entries); this.firstSeq = r.entries[0].seq; this.earlier.hidden = !r.hasMore;

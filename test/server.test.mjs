@@ -52,3 +52,20 @@ test('rejects cross-origin requests so a web page cannot drive the local API', a
     assert.equal(await raw('GET', '/api/state', { origin: 'https://evil.example' }), 403, 'reads are private too');
   } finally { server.closeAllConnections?.(); server.close(); }
 });
+
+test('history open refuses an id that is not a session id, so the path cannot leave the projects dir', async () => {
+  const webDir = mkdtempSync(join(tmpdir(), 'tower-web-'));
+  const store = fakeStore(); const opened = []; store.openHistory = async (cwd, id) => { opened.push(id); };
+  const server = createTowerServer({ store, webDir, hooksCtl: { status: async () => ({}) } });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (body) => fetch(base + '/api/history/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await post({ cwd: '/p/a', id: '../../../../etc/passwd' })).status, 400);
+    assert.equal((await post({ cwd: '/p/a', id: 'a/b' })).status, 400);
+    assert.equal((await post({ cwd: '/p/a' })).status, 400);
+    assert.deepEqual(opened, [], 'nothing reached the store');
+    assert.equal((await post({ cwd: '/p/a', id: '8700eaed-1b61-4f32-b678-6ec57640702b' })).status, 200);
+    assert.deepEqual(opened, ['8700eaed-1b61-4f32-b678-6ec57640702b']);
+  } finally { server.closeAllConnections?.(); server.close(); }
+});

@@ -49,3 +49,13 @@ test('buildDigest sets the last reply apart from earlier ones so the status verd
   assert.match(d, /Earlier replies[^\n]*:\n- First I will look at the CSS\./);
   assert.ok(d.indexOf('Earlier replies') < d.indexOf('Last reply'), 'the last reply comes last');
 });
+
+test('the in-memory summary cache is capped, not only the copy written to disk', async () => {
+  const runner = async () => ({ total_cost_usd: 0, structured_output: { headline: 'H', goal: '', done: [], now: '', next: '' } });
+  const s = new Summarizer({ runner });
+  for (let i = 0; i < 620; i++) s.request('s' + i, 'k' + i, () => 'd');
+  await s.idle();
+  assert.ok(s.cache.size <= 500, `cache holds ${s.cache.size}`);
+  assert.ok(s.cache.has('k619'), 'newest kept');
+  assert.ok(!s.cache.has('k0'), 'oldest evicted');
+});

@@ -24,12 +24,12 @@ export function normalizeHookEvent(raw, at) {
 }
 
 export function emptyHookState() {
-  return { attention: null, doneAt: null, lastMessage: null, lastPromptAt: null, ended: false, stoppedAgents: new Set(), startedAgents: new Map(), lastEventAt: null, lastEvent: null };
+  return { attention: null, doneAt: null, lastMessage: null, lastPromptAt: null, ended: false, stoppedAgents: new Set() };
 }
 
 /** Pure reducer: hook state for one session after one event. */
 export function applyHookEvent(prev, e) {
-  const s = { ...prev, stoppedAgents: new Set(prev.stoppedAgents), startedAgents: new Map(prev.startedAgents), lastEventAt: e.at, lastEvent: e.name };
+  const s = { ...prev, stoppedAgents: new Set(prev.stoppedAgents) };
   switch (e.name) {
     case 'UserPromptSubmit':
       s.attention = null; s.doneAt = null; s.lastPromptAt = e.at; s.ended = false;
@@ -56,9 +56,6 @@ export function applyHookEvent(prev, e) {
     case 'PostToolUse':
     case 'PostToolUseFailure':
       if (e.toolName === 'AskUserQuestion') s.attention = null;
-      break;
-    case 'SubagentStart':
-      if (e.agentId) s.startedAgents.set(e.agentId, { type: e.agentType, at: e.at });
       break;
     case 'SubagentStop':
       if (e.agentId) s.stoppedAgents.add(e.agentId);

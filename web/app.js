@@ -1,4 +1,4 @@
-import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK, fleetState } from './format.js';
+import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK, fleetState, AGENT_CLASS, sinceTs } from './format.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView, renderMarkdown } from './stream.js';
 
@@ -15,7 +15,6 @@ const ICON = {
 };
 const SESSION_LABEL = { working: 'working', needs: 'needs you', paused: 'ready for a new prompt', exited: 'ended' };
 const SESSION_CLASS = { working: 'working', needs: 'needs', paused: 'ready', exited: 'ended' };
-const AGENT_CLASS = { running: 'running', done: 'finished', exited: 'ended' };
 
 const state = {
   snap: null, mode: 'active', selectedProjects: new Set(), selected: null, expanded: new Set(), showExited: false,
@@ -248,6 +247,7 @@ function activate(node) {
 function markSeen(id) { const a = state.snap?.attention.find((x) => x.sessionId === id); if (a && !a.seen) { a.seen = true; post(`/api/session/${encodeURIComponent(id)}/seen`); renderStatus(state.snap); dismissToast(id); } }
 
 function open(sessionId, agentId = null) {
+  if (state.selected?.sessionId !== sessionId) state.doneAll = false; // the "+N more" expansion is per session
   state.selected = { sessionId, agentId }; state.drawerView = 'summary';
   markSeen(sessionId);
   const h = `#session=${encodeURIComponent(sessionId)}${agentId ? '&agent=' + encodeURIComponent(agentId) : ''}`;
@@ -257,7 +257,7 @@ function open(sessionId, agentId = null) {
 }
 function close() {
   if (!state.selected) return;
-  state.selected = null; $('drawer').hidden = true; stream.close();
+  state.selected = null; state.doneAll = false; $('drawer').hidden = true; stream.close();
   history.replaceState(null, '', location.pathname);
   renderGraph();
 }
@@ -299,13 +299,13 @@ const stat = (n, l) => `<b>${esc(n)}</b> ${esc(l)}`;
 function renderSessionHead(v, now) {
   const ui = uiState(v), cls = SESSION_CLASS[ui];
   const blocking = v.state === 'question' || v.state === 'permission';
-  const sinceTs = ui === 'needs' && v.followUp && !blocking ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
+  const since = sinceTs(v);
   const pct = v.contextTokens ? Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000))) : null;
   const stats = [pct != null ? stat(`${pct}%`, 'context') : null, stat(String(v.turns), v.turns === 1 ? 'turn' : 'turns'), stat(String(v.toolCalls), 'tools'), v.agents.length ? stat(String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents') : null, v.startedAt ? stat(duration(now - v.startedAt), '') : null].filter(Boolean).join(' · ') + (v.errors ? ` · <span class="err">${v.errors} error${v.errors === 1 ? '' : 's'}</span>` : '');
   const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp ? (v.followUp.seen ? 'Asked you: ' : '') + plain(v.followUp.reason) : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2><button class="icon-btn" data-act="close" title="Close (Esc)" aria-label="Close">${ICON.close}</button></div>
-    <div class="state-row"><span class="st ${cls}">${cls === 'working' ? '<span class="spinner"></span>' : `<span class="dot ${cls}"></span>`}${esc(blocking ? stateLabel(v.state) : SESSION_LABEL[ui])}${sinceTs ? ' · ' + ago(sinceTs, now) : ''}</span>${v.model ? `<span>· ${esc(shortModelName(v.model))}${v.effort ? ' · ' + esc(v.effort) + ' effort' : ''}</span>` : ''}</div>
+    <div class="state-row"><span class="st ${cls}">${cls === 'working' ? '<span class="spinner"></span>' : `<span class="dot ${cls}"></span>`}${esc(blocking ? stateLabel(v.state) : SESSION_LABEL[ui])}${since ? ' · ' + ago(since, now) : ''}</span>${v.model ? `<span>· ${esc(shortModelName(v.model))}${v.effort ? ' · ' + esc(v.effort) + ' effort' : ''}</span>` : ''}</div>
     <div class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 40))}</div>
     ${msg ? `<div class="state-msg">${esc(msg)}</div>` : ''}
     <div class="stats">${stats}</div>`;

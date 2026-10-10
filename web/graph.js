@@ -1,4 +1,4 @@
-import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName, uiState, UI_RANK } from './format.js';
+import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName, uiState, UI_RANK, AGENT_CLASS, sinceTs } from './format.js';
 
 export const SESSION_W = 300, SESSION_H = 104, AGENT_W = 224, AGENT_H = 64, FOLD_H = 28, COL_GAP = 40, ROW_GAP = 8, SESSION_GAP = 24, GROUP_GAP_Y = 40, LABEL_H = 28, WRAP_ROWS = 8, WRAP_GAP = 12;
 const RECENT_FINISHED = 3;
@@ -59,10 +59,14 @@ function place(n, x, y) {
 }
 
 /** Lay out one project as a block at (0,0): label row, then its sessions stacked. */
+/** Sessions keep the order they were first laid out in (the server lists newest first), so a state change never moves a row. */
+const firstSeen = new Map();
+const order = (id) => { if (!firstSeen.has(id)) firstSeen.set(id, firstSeen.size); return firstSeen.get(id); };
+
 function layoutGroup(p, sessions, expanded) {
   const nodes = [], edges = [];
   let y = LABEL_H;
-  sessions.sort((a, b) => UI_RANK[uiState(a)] - UI_RANK[uiState(b)] || (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
+  sessions.sort((a, b) => order(a.id) - order(b.id));
   for (const v of sessions) {
     const root = { kind: 'session', id: v.id, sessionId: v.id, data: v, w: SESSION_W, h: SESSION_H, children: agentTree(v, expanded) };
     place(root, 0, y);
@@ -126,7 +130,6 @@ function busPaths(e) {
   return parts.join('');
 }
 
-const AGENT_CLASS = { running: 'running', done: 'finished', exited: 'ended' };
 const AGENT_LABEL = { running: 'running', finished: 'finished', ended: 'ended' };
 
 /** State glyph centred at (x, y), 12px: spinner, filled ? , ◆, hollow ?, hollow ring, ✓, dashed ring. */
@@ -158,8 +161,8 @@ function sessionNode(n, { selected, changed, arrived, now }) {
   const count = nAgents ? (live ? `${live} of ${nAgents}` : `${nAgents} agent${nAgents === 1 ? '' : 's'}`) : '';
   const countW = count ? count.length * 6.2 + 12 : 0;
   const title = fit(v.title, n.w - 32 - countW, 13);
-  const sinceTs = ui === 'needs' && v.followUp && !blocking ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
-  const since = sinceTs ? agoCoarse(sinceTs, now) : '';
+  const sinceAt = sinceTs(v);
+  const since = sinceAt ? agoCoarse(sinceAt, now) : '';
   const label = ui === 'needs' ? 'needs you' : ui === 'paused' ? 'ready' : ui === 'exited' ? 'ended' : 'working';
   const act = cls === 'ended' ? `Ended${since ? ' ' + since + ' ago' : ''}` : cls === 'ready' && v.summary?.headline && !v.followUp ? v.summary.headline : plain(activityLine(v));
   const meta = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');

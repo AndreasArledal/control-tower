@@ -26,8 +26,10 @@ Zero-dependency Node (ESM). Modules:
 - `hook-events.mjs`: normalise hook payloads; pure reducer over per-session hook state.
 - `hooks-install.mjs` / `hooks-ctl.mjs`: merge/remove hooks in settings.json idempotently, refuse to touch unparseable settings, keep a backup.
 - `summarizer.mjs`: digest builder, `claude -p` runner (stripped), serial queue with on-disk cache.
-- `store.mjs`: the orchestrator. `tick()` once a second: registry → spool → transcripts → agents → derive. Emits `change` with a snapshot only when something visible changed. Serves timelines by stable `seq`, with a memory cap per transcript.
-- `index.mjs`: HTTP + SSE, static files, same-origin guard.
+- `store.mjs`: the orchestrator. `tick()` once a second: registry → spool → transcripts → agents → derive. A cheap fingerprint of the records (states, entry counts, summary stamps, a minute bucket) decides whether a snapshot is built at all; `change` is emitted only when the built views differ, or after seen, settings or a summary (`_dirty()`). Serves timelines by stable `seq`, with a memory cap per transcript; the model's id bookkeeping is bounded too (`MAX_TRACKED_IDS`). Hook status is a cached async read, refreshed every 10 s and after install/uninstall.
+- `view.mjs`: pure view builders over the records: session and agent views, the snapshot with projects, attention and counts.
+- `history.mjs`: recent transcripts per project, opening one read-only into the store.
+- `index.mjs`: HTTP + SSE, static files, same-origin guard, input validation (session ids are `[\w-]+`).
 - `start.mjs`: boots everything in-process (used by the CLI and the menu bar app).
 
 ## State resolution
@@ -63,11 +65,11 @@ Triggered automatically when a live session is first seen, whenever it enters `d
 
 ## Web
 
-Plain ES modules, no build. Visual design per `docs/DESIGN-SYSTEM.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript, `format.js` has the small helpers. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
+Plain ES modules, no build. Visual design per `docs/DESIGN-SYSTEM.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline in first-seen order so a state change never moves a row, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript (bounded to a window of entries, paused while the tab is hidden, and immune to a session switch mid-fetch), `format.js` has the shared helpers, including the state-to-display mapping both the graph and the drawer use. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
 
 ## Menu bar app
 
-`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The icon's beacon carries the fleet state in shape, since template icons are monochrome: hollow when nothing runs, filled when sessions are alive, haloed when something needs you (`app/make-icon.mjs` generates the three). The window is the same page.
+`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The icon's beacon carries the fleet state in shape, since template icons are monochrome: hollow when nothing runs, filled when sessions are alive, haloed when something needs you (`app/make-icon.mjs` generates the three). The window is the same page. It behaves as a normal app: Dock icon, window on launch, closing the window hides it and the app keeps running, ⌘Q quits. A "Menu bar only" preference (stored in `prefs.json` under the app's userData dir) removes the Dock icon while the window is hidden.
 
 ## Tree layout
 
