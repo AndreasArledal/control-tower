@@ -2,7 +2,7 @@
   "name": "control-tower-menubar",
   "version": "0.2.0",
   "private": true,
-  "description": "macOS menu bar wrapper for Control Tower",
+  "description": "Control Tower as a Mac app: embedded server, window, menu bar tower",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",

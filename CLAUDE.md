@@ -1,10 +1,11 @@
 # Control Tower
 
 Local dashboard for Claude Code sessions. Zero-dependency Node server (`server/`, ESM `.mjs`) that tails
-`~/.claude` and serves a plain HTML/ES-module page (`web/`) over JSON + SSE. Optional Electron menu bar
-wrapper in `app/`. No build step, no linter, no runtime npm dependencies outside `app/`.
+`~/.claude` and serves a plain HTML/ES-module page (`web/`) over JSON + SSE. Optional Electron Mac app
+in `app/` with a menu bar item. No build step, no linter, no runtime npm dependencies outside `app/`.
 
-Read `docs/DESIGN.md` first: it is the module map, data sources and state-resolution rules.
+Read `docs/DESIGN.md` first: it is the module map, data sources and state-resolution rules. User-facing guides live in
+`docs/*.md` (index in `docs/README.md`); keep them in step with behaviour changes, and regenerate their images with the demo script.
 `docs/DESIGN-SYSTEM.md` is the visual system with the rationale for every surface; UI work follows it.
 
 ## Commands
@@ -16,10 +17,10 @@ zsh -lic 'node --test'                                   # all tests, ~1s, no ne
 zsh -lic 'node --test test/store.test.mjs'               # one file
 zsh -lic 'node bin/control-tower.mjs --no-open --no-summaries --port 4748'   # dev server without browser popups or spend
 zsh -lic 'node bin/control-tower.mjs hooks status'
-zsh -lic 'node scripts/demo.mjs'                          # regenerate docs/screenshot.png from invented sessions (--keep serves it on 4749)
+zsh -lic 'node scripts/demo.mjs --docs'                   # regenerate docs/screenshot.png and docs/images/* from invented sessions (--keep serves it on 4749)
 ```
 
-Menu bar app (macOS): `cd app && npm install && npm start` runs from source; `npm run install-app`
+Mac app: `cd app && npm install && npm start` runs from source; `npm run install-app`
 packages and copies to /Applications; `npm run icon` regenerates the tray icons; `TOWER_SMOKE=3000 npm start`
 quits after 3 s for a smoke test.
 
@@ -60,5 +61,5 @@ Reload the browser to pick up `web/` changes. Restart the server for `server/` c
 
 Dense, single-quoted ESM with semicolons; `.cjs` only for Electron's main process. Comments say why, not
 what. Commit messages are one descriptive present-tense line, no conventional-commit prefix
-(e.g. "Menu bar app: Dock icon and ⌘-Tab while the window is open"). Keep `docs/DESIGN.md` in step
+(e.g. "Seen follow-ups stop counting, stricter waiting verdict, fleet beacon on mark, tab icon and tray"). Keep `docs/DESIGN.md` in step
 when state rules or module responsibilities change.

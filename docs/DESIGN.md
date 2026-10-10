@@ -4,7 +4,7 @@ Date: 2026-10-09. Status: implemented in this repo.
 
 ## Intent
 
-An engineer runs many Claude Code sessions at once and loses track of them. They want one local page that shows every session and its agents as a graph, lets them read any session's reasoning, and tells them (in the page, never via OS notifications) when a session needs input or has finished. Summaries should make a session understandable at a glance. Portability matters: anyone with Claude Code should be able to run it; a standalone menu bar app is a bonus.
+An engineer runs many Claude Code sessions at once and loses track of them. They want one local page that shows every session and its agents as a graph, lets them read any session's reasoning, and tells them (in the page, never via OS notifications) when a session needs input or has finished. Summaries should make a session understandable at a glance. Portability matters: anyone with Claude Code should be able to run it; a Mac app with the server built in is a bonus.
 
 ## Data sources
 
@@ -30,7 +30,7 @@ Zero-dependency Node (ESM). Modules:
 - `view.mjs`: pure view builders over the records: session and agent views, the snapshot with projects, attention and counts.
 - `history.mjs`: recent transcripts per project, opening one read-only into the store.
 - `index.mjs`: HTTP + SSE, static files, same-origin guard, input validation (session ids are `[\w-]+`).
-- `start.mjs`: boots everything in-process (used by the CLI and the menu bar app).
+- `start.mjs`: boots everything in-process (used by the CLI and the Mac app).
 
 ## State resolution
 
@@ -67,9 +67,9 @@ Triggered automatically when a live session is first seen, whenever it enters `d
 
 Plain ES modules, no build. Visual design per `docs/DESIGN-SYSTEM.md`: top bar, project chip rail, full-bleed canvas, drawer overlay on demand. `app.js` owns state and wiring, `graph.js` lays out and renders the SVG tree (sessions stacked under a project label with its headline in first-seen order so a state change never moves a row, agents to the right, finished agents folded after three), `stream.js` polls the timeline for the open transcript (bounded to a window of entries, paused while the tab is hidden, and immune to a session switch mid-fetch), `format.js` has the shared helpers, including the state-to-display mapping both the graph and the drawer use. One SSE stream carries snapshots. Deep links: `#session=<id>&agent=<id>`.
 
-## Menu bar app
+## Mac app
 
-`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The icon's beacon carries the fleet state in shape, since template icons are monochrome: hollow when nothing runs, filled when sessions are alive, haloed when something needs you (`app/make-icon.mjs` generates the three). The window is the same page. It behaves as a normal app: Dock icon, window on launch, closing the window hides it and the app keeps running, ⌘Q quits. A "Menu bar only" preference (stored in `prefs.json` under the app's userData dir) removes the Dock icon while the window is hidden.
+`app/main.cjs` (Electron) is a normal desktop app with a menu bar item. It embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The icon's beacon carries the fleet state in shape, since template icons are monochrome: hollow when nothing runs, filled when sessions are alive, haloed when something needs you (`app/make-icon.mjs` generates the three). The window is the same page. Dock icon, window on launch, closing the window hides it and the app keeps running, ⌘Q quits. A "Menu bar only" preference (stored in `prefs.json` under the app's userData dir) removes the Dock icon while the window is hidden.
 
 ## Tree layout
 

@@ -6,9 +6,11 @@
 //   node scripts/demo.mjs                 # write docs/screenshot.png and exit
 //   node scripts/demo.mjs --keep          # also leave the server running for a look (Ctrl-C to stop)
 //   node scripts/demo.mjs --port 4749 --out docs/screenshot.png
+//   node scripts/demo.mjs --docs             # also regenerate every image under docs/images/
 //   node scripts/demo.mjs --keep --no-shot   # just serve the fixture
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { spawn, execFile } from 'node:child_process';
 import { TowerStore } from '../server/store.mjs';
@@ -216,39 +218,88 @@ console.log(`      states: ${snap.sessions.map((v) => `${v.title.split(' ').slic
 function cleanup() {
   for (const c of children) { try { c.kill(); } catch { /* gone */ } }
   store.stop(); server.closeAllConnections?.(); server.close();
-  if (!flag('--keep')) rmSync(HOME, { recursive: true, force: true });
+  if (!flag('--keep')) rmSync(HOME, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
-/** Drive headless Chrome over the DevTools protocol: the page keeps an SSE stream open, which stalls Chrome's own --screenshot mode. */
-async function screenshot(pageUrl, out) {
+/**
+ * Drive headless Chrome over the DevTools protocol: the page keeps an SSE stream open, which stalls Chrome's own
+ * --screenshot mode. One Chrome, one tab, many captures; each capture navigates, optionally acts, then clips.
+ */
+async function chromeSession() {
   const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${join(HOME, 'chrome')}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
-  try {
-    const wsUrl = await new Promise((resolve, reject) => {
-      let err = '';
-      chrome.stderr.on('data', (d) => { err += d; const m = /DevTools listening on (ws:\/\/\S+)/.exec(err); if (m) resolve(m[1]); });
-      chrome.on('exit', () => reject(new Error('chrome exited: ' + err.slice(-300))));
-      setTimeout(() => reject(new Error('chrome did not start')), 15_000).unref();
-    });
-    const target = await (await fetch(`http://127.0.0.1:${new URL(wsUrl).port}/json/new?about:blank`, { method: 'PUT' })).json();
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
-    let seq = 0; const pending = new Map();
-    ws.onmessage = (ev) => { const m = JSON.parse(ev.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
-    const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++seq; pending.set(id, (m) => (m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result))); ws.send(JSON.stringify({ id, method, params })); });
-    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 2, mobile: false });
-    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
-    await send('Page.enable');
-    await send('Page.navigate', { url: pageUrl });
-    await new Promise((r) => setTimeout(r, 4000)); // first snapshot over SSE, fonts, fit animation
-    const shot = await send('Page.captureScreenshot', { format: 'png' });
+  const wsUrl = await new Promise((resolve, reject) => {
+    let err = '';
+    chrome.stderr.on('data', (d) => { err += d; const m = /DevTools listening on (ws:\/\/\S+)/.exec(err); if (m) resolve(m[1]); });
+    chrome.on('exit', () => reject(new Error('chrome exited: ' + err.slice(-300))));
+    setTimeout(() => reject(new Error('chrome did not start')), 15_000).unref();
+  });
+  const target = await (await fetch(`http://127.0.0.1:${new URL(wsUrl).port}/json/new?about:blank`, { method: 'PUT' })).json();
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
+  let seq = 0; const pending = new Map();
+  ws.onmessage = (ev) => { const m = JSON.parse(ev.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
+  const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++seq; pending.set(id, (m) => (m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result))); ws.send(JSON.stringify({ id, method, params })); });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await send('Page.enable'); await send('Runtime.enable');
+  const click = async (selector) => { await send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(selector)})?.click()` }); await sleep(900); };
+  /** url, out, optional clip {x,y,width,height} in CSS px, scale (2 for crisp docs), theme, and an async act(click) to run before the shot. */
+  async function capture({ url: pageUrl, out, clip = { x: 0, y: 0, width: 1440, height: 900 }, scale = 2, theme = 'dark', act = null, settle = 3500 }) {
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
+    await send('Page.navigate', { url: pageUrl }); await sleep(settle); // first snapshot over SSE, fonts, fit animation
+    if (act) await act(click);
+    const shot = await send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale } });
+    mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, Buffer.from(shot.data, 'base64'));
-    ws.close();
     console.log(`demo: wrote ${out}`);
-  } finally { chrome.kill(); }
+  }
+  return { capture, close() { ws.close(); const gone = new Promise((r) => chrome.once('exit', r)); chrome.kill(); return gone; } };
 }
+
+/** A second tower over an empty config dir, for the "nothing running" captures. */
+async function emptyTower(port) {
+  const home = mkdtempSync(join(tmpdir(), 'tower-empty-'));
+  const store = new TowerStore({ home, summarizer: null }); await store.start();
+  const server = createTowerServer({ store, webDir: WEB_DIR, hooksCtl: makeHooksCtl(home) });
+  await new Promise((r) => server.listen(port, '127.0.0.1', r));
+  return { url: `http://localhost:${port}`, close() { store.stop(); server.closeAllConnections?.(); server.close(); rmSync(home, { recursive: true, force: true }); } };
+}
+
+/** The three menu bar icons on a light and a dark menu bar, as one small page. */
+function menuBarPreview() {
+  const img = (f) => `data:image/png;base64,${readFileSync(new URL(`../app/${f}`, import.meta.url)).toString('base64')}`;
+  const row = (cls) => `<div class="${cls}">` + [['iconTemplate@2x.png', 'nothing running'], ['iconLiveTemplate@2x.png', 'sessions live'], ['iconNeedsTemplate@2x.png', 'needs you']].map(([f, l]) => `<span><img src="${img(f)}">${l}</span>`).join('') + '</div>';
+  const html = `<!doctype html><meta charset="utf-8"><style>body{margin:0;font:13px -apple-system,sans-serif;width:640px}div{padding:14px 20px;display:flex;gap:28px;align-items:center}.l{background:#ececec;color:#222}.d{background:#1e1e1e;color:#eee}.d img{filter:invert(1)}img{width:18px;height:18px}span{display:flex;gap:7px;align-items:center}</style>${row('l')}${row('d')}`;
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+}
+
+const seen = (id) => fetch(`${url}/api/session/${encodeURIComponent(id)}/seen`, { method: 'POST' });
+const DOCS = fileURLToPath(new URL('../docs/', import.meta.url));
 
 if (!flag('--no-shot')) {
-  try { await screenshot(`${url}/#session=${encodeURIComponent(S1)}`, OUT); } catch (err) { console.error('[demo] screenshot failed:', err.message); }
+  let chrome = null, empty = null;
+  try {
+    chrome = await chromeSession();
+    const S1_URL = `${url}/#session=${encodeURIComponent(S1)}`;
+    await chrome.capture({ url: S1_URL, out: OUT });
+    if (flag('--docs')) {
+      const drawer = { x: 992, y: 80, width: 448, height: 820 };
+      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/beacon-needs.png'), clip: { x: 0, y: 0, width: 560, height: 44 } });
+      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/needs-you-list.png'), clip: { x: 0, y: 0, width: 760, height: 250 }, act: (click) => click('#attention-badge') });
+      await chrome.capture({ url: S1_URL, out: join(DOCS, 'images/drawer-summary.png'), clip: drawer });
+      await chrome.capture({ url: S1_URL, out: join(DOCS, 'images/transcript.png'), clip: drawer, act: async (click) => { await click('[data-act="transcript"]'); await new Promise((r) => setTimeout(r, 1500)); } });
+      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/settings.png'), clip: { x: 1080, y: 0, width: 360, height: 395 }, act: (click) => click('#settings-btn') });
+      await chrome.capture({ url: S1_URL, out: join(DOCS, 'images/light-theme.png'), theme: 'light', scale: 1 });
+      await seen(S4); // the release-notes follow-up has been looked at
+      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/seen-followup.png'), clip: { x: 0, y: 440, width: 760, height: 370 } });
+      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/needs-you-list-seen.png'), clip: { x: 0, y: 0, width: 760, height: 250 }, act: (click) => click('#attention-badge') });
+      empty = await emptyTower(PORT + 1);
+      await chrome.capture({ url: `${empty.url}/`, out: join(DOCS, 'images/beacon-empty.png'), clip: { x: 0, y: 0, width: 560, height: 44 } });
+      await chrome.capture({ url: `${empty.url}/`, out: join(DOCS, 'images/empty.png'), scale: 1 });
+      await chrome.capture({ url: menuBarPreview(), out: join(DOCS, 'images/menubar-icons.png'), clip: { x: 0, y: 0, width: 640, height: 100 }, settle: 800 });
+    }
+  } catch (err) { console.error('[demo] screenshot failed:', err.message); }
+  finally { await chrome?.close(); empty?.close(); }
 }
 
 if (flag('--keep')) {
