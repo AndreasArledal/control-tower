@@ -34,3 +34,15 @@ test('sinceTs picks the timestamp a node and the drawer both show for a state', 
   assert.equal(sinceTs({ alive: true, state: 'working', stateSince: 5, lastAssistantAt: 9 }), 5);
   assert.deepEqual(AGENT_CLASS, { running: 'running', done: 'finished', exited: 'ended' });
 });
+
+test('glyphSvg draws one symbol per state, nudging only while unseen', async () => {
+  const { glyphSvg } = await import('../web/format.js');
+  for (const [kind, part] of [['working', 'arc'], ['question', 'bubble'], ['permission', 'lock'], ['followup', 'bubble hollow'], ['ready', 'cursor'], ['finished', 'check'], ['ended', 'stop']]) {
+    const svg = glyphSvg(kind, 14);
+    assert.match(svg, /^<svg class="g g-\w+/, kind);
+    assert.ok(svg.includes(`class="${part}`), `${kind} draws a ${part}`);
+    assert.ok(svg.includes('width="14"'));
+  }
+  assert.ok(glyphSvg('followup', 12, { still: true }).includes('still'), 'a seen follow-up keeps still');
+  assert.ok(!glyphSvg('followup', 12).includes('still'));
+});

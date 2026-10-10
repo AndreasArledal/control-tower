@@ -1,4 +1,4 @@
-import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK, fleetState, AGENT_CLASS, sinceTs } from './format.js';
+import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK, fleetState, AGENT_CLASS, sinceTs, glyphSvg, UI_GLYPH } from './format.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView, renderMarkdown } from './stream.js';
 
@@ -42,7 +42,7 @@ function faviconFor(f) {
 }
 function applyFleet(snap = state.snap) {
   const { state: f, label } = fleetState(snap, state.connected !== false);
-  const b = $('brand'); b.className = `brand fleet-${f}`; b.title = label;
+  const b = $('brand'); b.classList.toggle('fleet-offline', f === 'offline'); b.title = f === 'offline' ? label : 'Control Tower';
   if (f !== state.fleet) { state.fleet = f; $('favicon').href = faviconFor(f); }
 }
 
@@ -87,14 +87,14 @@ function renderStatus(snap) {
   const n = (st) => live.filter((s) => uiState(s) === st).length;
   const agents = live.reduce((k, s) => k + s.runningAgents, 0);
   const parts = [];
-  if (n('working')) parts.push(`<span class="st"><span class="dot working"></span>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
-  if (n('paused')) parts.push(`<span class="st"><span class="dot hollow"></span>${n('paused')} ready</span>`);
+  if (n('working')) parts.push(`<span class="st">${glyphSvg('working', 12)}${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
+  if (n('paused')) parts.push(`<span class="st">${glyphSvg('ready', 12)}${n('paused')} ready</span>`);
   // the segment counts what still needs you (blocking prompts, unseen follow-ups); seen follow-ups only keep the list reachable
   const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length, need = snap.sessions.filter((v) => v.needsYou).length;
   const open = !$('attention-pop').hidden;
-  if (need) parts.push(`<button class="needs ${unseen ? 'unseen' : ''} ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="${unseen ? `${unseen} new` : 'Sessions that need you'}"><span class="dot"></span>${need} need${need === 1 ? 's' : ''} you <span class="caret">⌄</span></button>`);
-  else if (total) parts.push(`<button class="needs muted ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="Questions you have seen"><span class="dot"></span>asked you <span class="caret">⌄</span></button>`);
-  $('status').innerHTML = live.length ? parts.join('<span class="sep">·</span>') : '<span class="st"><span class="dot hollow"></span>no sessions running</span>';
+  if (need) parts.push(`<button class="needs ${unseen ? 'unseen' : ''} ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="${unseen ? `${unseen} new` : 'Sessions that need you'}">${glyphSvg('question', 12, { still: !unseen })}${need} need${need === 1 ? 's' : ''} you <span class="caret">⌄</span></button>`);
+  else if (total) parts.push(`<button class="needs muted ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="Questions you have seen">${glyphSvg('followup', 12, { still: true })}asked you <span class="caret">⌄</span></button>`);
+  $('status').innerHTML = live.length ? parts.join('<span class="sep">·</span>') : `<span class="st">${glyphSvg('idle', 12)}no sessions running</span>`;
   $('attention-badge')?.addEventListener('click', () => togglePop('attention-pop'));
   if (state.prevAttention != null && unseen > state.prevAttention) { const b = $('attention-badge'); if (b) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); } }
   state.prevAttention = unseen;
@@ -114,7 +114,7 @@ function renderAttentionPop() {
   // blocking prompts and unseen follow-ups first; follow-ups you have looked at wait under a divider, like read notifications
   const row = (a) => `
     <button class="att-item ${a.state} ${a.seen ? 'seen' : ''} ${!a.seen && !before.has(a.sessionId + ':' + a.since) ? 'new' : ''}" data-focus="${esc(a.sessionId)}">
-      <span class="g">${a.state === 'permission' ? '◆' : '?'}</span>
+      ${glyphSvg(a.state === 'followup' ? 'followup' : a.state, 14, { still: a.seen })}
       <span class="body"><span class="t">${esc(a.projectName)} · ${esc(a.state === 'followup' ? 'in the last reply' : stateLabel(a.state))}</span><span class="m">${esc(plain(a.message || a.title))}</span></span>
       <span class="age">${ago(a.since, now)}</span>
     </button>`;
@@ -129,9 +129,9 @@ function renderAttentionPop() {
 
 function renderHooksRow(snap) {
   $('hooks-row').innerHTML = snap.hooksInstalled
-    ? `<span class="dot ready"></span>Hooks installed: exact “needs you” signals.`
+    ? `${glyphSvg('finished', 12)}Hooks installed: exact “needs you” signals.`
     : `Install Claude Code hooks for exact “needs you” signals. <button class="btn primary" id="hooks-install" style="margin-left:8px">Install hooks</button>`;
-  $('hooks-install')?.addEventListener('click', async () => { const r = await post('/api/hooks/install'); $('hooks-row').innerHTML = r?.installed ? `<span class="dot ready"></span>Installed. ${esc(r.note)}` : 'Could not install hooks.'; });
+  $('hooks-install')?.addEventListener('click', async () => { const r = await post('/api/hooks/install'); $('hooks-row').innerHTML = r?.installed ? `${glyphSvg('finished', 12)}Installed. ${esc(r.note)}` : 'Could not install hooks.'; });
 }
 
 /* ---------- filter row ---------- */
@@ -149,9 +149,9 @@ function renderRail(snap) {
   const chips = listedProjects(snap).map((p, i) => {
     const worst = snap.sessions.filter((v) => v.cwd === p.id && v.alive).map((v) => uiState(v)).sort((a, b) => UI_RANK[a] - UI_RANK[b])[0];
     const dot = worst ? SESSION_CLASS[worst] : 'ended';
-    return `<button class="chip ${pick && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: only this project · shift-click: add · key ${i + 1}"><span class="dot ${dot}"></span><span class="label">${esc(p.name)}</span></button>`;
+    return `<button class="chip ${pick && state.selectedProjects.has(p.id) ? 'selected' : ''}" data-project="${esc(p.id)}" title="${esc(p.headline ? p.headline + '\n' : '')}${esc(shortPath(p.path, 60))}\nclick: only this project · shift-click: add · key ${i + 1}">${glyphSvg(UI_GLYPH[dot] ?? 'ended', 11)}<span class="label">${esc(p.name)}</span></button>`;
   }).join('');
-  $('rail').innerHTML = `<div class="seg"><button class="seg-btn ${state.mode === 'active' ? 'on' : ''}" data-project="active" title="Projects with something going on, or used in the last hour (0)">Active</button><button class="seg-btn ${state.mode === 'all' ? 'on' : ''}" data-project="*" title="Every project with a live session">All</button></div><span class="rail-sep"></span>${chips}<span class="spacer"></span><button class="chip ${state.showExited ? 'on' : ''}" id="show-exited" title="Show ended sessions (e)"><span class="dot ${state.showExited ? 'ended' : 'hollow'}"></span>ended</button>`;
+  $('rail').innerHTML = `<div class="seg"><button class="seg-btn ${state.mode === 'active' ? 'on' : ''}" data-project="active" title="Projects with something going on, or used in the last hour (0)">Active</button><button class="seg-btn ${state.mode === 'all' ? 'on' : ''}" data-project="*" title="Every project with a live session">All</button></div><span class="rail-sep"></span>${chips}<span class="spacer"></span><button class="chip ${state.showExited ? 'on' : ''}" id="show-exited" title="Show ended sessions (e)">${glyphSvg('ended', 11)}ended</button>`;
 }
 
 /* ---------- graph ---------- */
@@ -300,20 +300,21 @@ function renderSessionHead(v, now) {
   const ui = uiState(v), cls = SESSION_CLASS[ui];
   const blocking = v.state === 'question' || v.state === 'permission';
   const since = sinceTs(v);
+  const glyphKind = ui === 'needs' ? (blocking ? v.state : 'followup') : cls;
   const pct = v.contextTokens ? Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000))) : null;
   const stats = [pct != null ? stat(`${pct}%`, 'context') : null, stat(String(v.turns), v.turns === 1 ? 'turn' : 'turns'), stat(String(v.toolCalls), 'tools'), v.agents.length ? stat(String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents') : null, v.startedAt ? stat(duration(now - v.startedAt), '') : null].filter(Boolean).join(' · ') + (v.errors ? ` · <span class="err">${v.errors} error${v.errors === 1 ? '' : 's'}</span>` : '');
   const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp ? (v.followUp.seen ? 'Asked you: ' : '') + plain(v.followUp.reason) : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2><button class="icon-btn" data-act="close" title="Close (Esc)" aria-label="Close">${ICON.close}</button></div>
-    <div class="state-row"><span class="st ${cls}">${cls === 'working' ? '<span class="spinner"></span>' : `<span class="dot ${cls}"></span>`}${esc(blocking ? stateLabel(v.state) : SESSION_LABEL[ui])}${since ? ' · ' + ago(since, now) : ''}</span>${v.model ? `<span>· ${esc(shortModelName(v.model))}${v.effort ? ' · ' + esc(v.effort) + ' effort' : ''}</span>` : ''}</div>
+    <div class="state-row"><span class="st ${cls}">${glyphSvg(glyphKind, 14)}${esc(blocking ? stateLabel(v.state) : SESSION_LABEL[ui])}${since ? ' · ' + ago(since, now) : ''}</span>${v.model ? `<span>· ${esc(shortModelName(v.model))}${v.effort ? ' · ' + esc(v.effort) + ' effort' : ''}</span>` : ''}</div>
     <div class="where" title="${esc(v.cwd)}">${esc(v.name || v.id.slice(0, 8))} · ${esc(shortPath(v.cwd, 40))}</div>
     ${msg ? `<div class="state-msg">${esc(msg)}</div>` : ''}
     <div class="stats">${stats}</div>`;
   const s = v.summary, mode = state.snap.summaries.mode;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary';
   const refresh = mode === 'off' ? '' : `<button class="link" data-act="summarize">${v.summarizing ? 'writing…' : (s ? 'refresh' : 'write one now')}</button>`;
-  const live = ui === 'working' ? `<div class="live"><span class="spinner"></span>${esc(plain(activityLine(v)))}</div>` : '';
-  const agentsBlock = v.agents.length ? `<section class="sec"><h3>agents${v.runningAgents ? ` · ${v.runningAgents} of ${v.agents.length} running` : ` · ${v.agents.length}`}</h3><ul class="agents">${v.agents.slice().sort((a, b) => (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || (b.startedAt ?? 0) - (a.startedAt ?? 0)).map((a) => `<li><button data-agent="${esc(a.id)}"><span class="dot ${AGENT_CLASS[a.state] ?? 'ended'}"></span><span class="t">${esc(a.description || a.type)}</span><span class="age">${a.state === 'running' ? 'running' : ago(a.endedAt ?? a.lastActivityAt, now)}</span></button></li>`).join('')}</ul></section>` : '';
+  const live = ui === 'working' ? `<div class="live">${glyphSvg('working', 12)}${esc(plain(activityLine(v)))}</div>` : '';
+  const agentsBlock = v.agents.length ? `<section class="sec"><h3>agents${v.runningAgents ? ` · ${v.runningAgents} of ${v.agents.length} running` : ` · ${v.agents.length}`}</h3><ul class="agents">${v.agents.slice().sort((a, b) => (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || (b.startedAt ?? 0) - (a.startedAt ?? 0)).map((a) => `<li><button data-agent="${esc(a.id)}">${glyphSvg(AGENT_CLASS[a.state] ?? 'ended', 12)}<span class="t">${esc(a.description || a.type)}</span><span class="age">${a.state === 'running' ? 'running' : ago(a.endedAt ?? a.lastActivityAt, now)}</span></button></li>`).join('')}</ul></section>` : '';
   if (s) {
     const done = s.done ?? [];
     sumEl.innerHTML = `
@@ -340,11 +341,11 @@ function renderAgentHead(v, a, now) {
   const line = cls === 'running' ? plain(activityLine({ state: 'working', activity: a.activity })) : cls === 'finished' ? `Finished${a.endedAt ? ' ' + ago(a.endedAt, now) + ' ago' : ''}${a.startedAt && a.endedAt && a.endedAt > a.startedAt ? ' after ' + duration(a.endedAt - a.startedAt) : ''}` : 'Ended with its session';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(a.description || a.type)}">${esc(a.description || a.type)}</h2><button class="icon-btn" data-act="close" title="Close (Esc)" aria-label="Close">${ICON.close}</button></div>
-    <div class="state-row"><span class="st ${cls}">${cls === 'running' ? '<span class="spinner"></span>' : `<span class="dot ${cls}"></span>`}${cls}</span><span>· ${esc(String(a.type).split(':').pop())}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''}</span></div>
+    <div class="state-row"><span class="st ${cls}">${glyphSvg(cls, 14)}${cls}</span><span>· ${esc(String(a.type).split(':').pop())}${a.isFork ? ' · fork' : ''}${a.background ? ' · background' : ''}</span></div>
     <div class="where">in ${esc(v.name || v.title)}</div>
     <div class="stats">${[stat(tokens(a.contextTokens), 'context'), stat(String(a.toolCalls), 'tools'), stat(shortModelName(a.model || v.model) || '–', ''), a.startedAt ? stat(duration((a.endedAt ?? now) - a.startedAt), '') : null].filter(Boolean).join(' · ')}</div>`;
   const sumEl = $('drawer-summary'); sumEl.className = 'drawer-summary';
-  sumEl.innerHTML = `${cls === 'running' ? `<section class="sec now" style="margin-top:0"><h3>now</h3><div class="live"><span class="spinner"></span>${esc(line)}</div></section>` : ''}<section class="sec" ${cls !== 'running' ? 'style="margin-top:0"' : ''}><h3>${cls === 'running' ? 'latest reply' : 'result'}</h3>${a.lastText ? `<div class="md">${renderMarkdown(clip(a.lastText, 1500))}</div>` : `<p class="muted">${cls === 'running' ? 'No reply from this agent yet.' : esc(line)}</p>`}</section>`;
+  sumEl.innerHTML = `${cls === 'running' ? `<section class="sec now" style="margin-top:0"><h3>now</h3><div class="live">${glyphSvg('working', 12)}${esc(line)}</div></section>` : ''}<section class="sec" ${cls !== 'running' ? 'style="margin-top:0"' : ''}><h3>${cls === 'running' ? 'latest reply' : 'result'}</h3>${a.lastText ? `<div class="md">${renderMarkdown(clip(a.lastText, 1500))}</div>` : `<p class="muted">${cls === 'running' ? 'No reply from this agent yet.' : esc(line)}</p>`}</section>`;
   $('drawer-foot').innerHTML = `${actBtn('up', 'back', 'Session', 'Back to the session')}${a.parentAgentId ? actBtn('parent', 'up', 'Parent') : ''}${actBtn('transcript', 'list', state.transcriptOpen ? 'Hide transcript' : 'Transcript', 'This agent\'s transcript', 'right')}`;
   wireActs(v, a);
 }
@@ -380,7 +381,7 @@ async function showHistory(v) {
   state.drawerView = 'history'; applyTranscript();
   $('drawer-head').innerHTML = `<div class="row history"><button class="icon-btn" data-act="back" title="Back" aria-label="Back">${ICON.back}</button><h2>Recent in ${esc(cwd.split('/').pop())}</h2><button class="icon-btn" data-act="close" title="Close (Esc)" aria-label="Close">${ICON.close}</button></div>`;
   el.className = 'drawer-summary history';
-  el.innerHTML = `<ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><span class="t">${esc(h.title || h.id.slice(0, 8))}${h.live ? ' <span class="live"><span class="dot working"></span>live</span>' : ''}</span><span class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${formatBytes(h.size)}</span></button></li>`).join('') || '<li class="muted">No sessions recorded here.</li>'}</ul>`;
+  el.innerHTML = `<ul class="history-list">${(list ?? []).map((h) => `<li><button data-open="${esc(h.id)}"><span class="t">${esc(h.title || h.id.slice(0, 8))}${h.live ? ` <span class="live">${glyphSvg('working', 10)}live</span>` : ''}</span><span class="sub">${ago(h.modified, now)} ago · ${h.turns ?? '?'} turns · ${formatBytes(h.size)}</span></button></li>`).join('') || '<li class="muted">No sessions recorded here.</li>'}</ul>`;
   $('drawer-foot').innerHTML = actBtn('back', 'back', 'Back');
   const back = () => { state.drawerView = 'summary'; applyTranscript(); renderDrawer(); };
   document.querySelectorAll('#drawer-head [data-act="back"], #drawer-foot [data-act="back"]').forEach((b) => b.addEventListener('click', back));

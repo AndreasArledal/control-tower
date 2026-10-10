@@ -1,19 +1,21 @@
-# Using the page
+# Using the app
 
-Control Tower is one page: a status line on top, a project filter under it, and the graph. Click a node and a drawer slides in from the right. Nothing on the page ever asks for your attention outside the page itself.
+This is the same whether you run Control Tower from the terminal and open it in a browser, or as the Mac app. It is one screen: a status line on top, a project filter under it, and the graph. Click a node and a drawer slides in from the right. Nothing ever asks for your attention outside this screen.
 
-![The page: three projects, five sessions, a nested agent tree, the drawer open on one session](screenshot.png)
+![The app: three projects, five sessions, a nested agent tree, the drawer open on one session](screenshot.png)
 
 ## The four states
 
 Every session is in exactly one of these, derived from the transcript, Claude Code's own busy flag and, when installed, the [hooks](hooks.md):
 
-| State | Colour | Meaning |
-|---|---|---|
-| Working | blue | The session or one of its agents is running. The node shows the current tool call. |
-| Needs you | amber | A question or permission prompt is blocking the terminal, or the last reply left something with you (see below). |
-| Ready | grey | The turn ended and the session is waiting for a new prompt. The node shows where it stands. |
-| Ended | dim | The process is gone. Hidden unless you turn on "ended" or open the session from the recent list. |
+| State | Symbol | Motion | Meaning |
+|---|---|---|---|
+| Working | an arc, blue | spins | The session or one of its agents is running. The node shows the current tool call. |
+| Needs you | a speech bubble with `?` (question), a padlock (permission), a hollow bubble (the last reply asked you something), amber | nudges up by a pixel every few seconds, until seen | Something waits for you; see below. |
+| Ready | `›` with a cursor bar, grey | the cursor blinks slowly | The turn ended and the session is waiting for a new prompt. The node shows where it stands. |
+| Ended | a dashed square, dim | none | The process is gone. Hidden unless you turn on "ended" or open the session from the recent list. |
+
+The same symbols appear on the nodes, on the project labels and chips, in the status line, in the needs-you list and in the drawer, so you never have to remember which colour means what. Agents use the arc while running, a `✓` when finished, the dashed square when ended.
 
 There is deliberately no "finished" for sessions: a model reading one reply cannot know whether you intend to continue. Agents do read finished, because that is a fact.
 
@@ -25,21 +27,9 @@ Sessions keep the order they first appeared in. A state change changes a node's 
 
 A session node carries its title, what it is doing right now (or where it stands, when ready), model and effort, its state with how long it has been in it, and how much of the context window is used. An agent node carries its task, its current tool call, tool calls so far, and the model.
 
-## The beacon
+## The tab icon
 
-The beacon on the tower mark in the top left is the whole fleet in one dot. Hover it for the counts. The tab icon carries the same colour, so a background tab tells you whether anything is flying.
-
-| Beacon | Meaning |
-|---|---|
-| hollow ring | No session is running |
-| grey | Sessions are alive, all ready for a prompt |
-| blue, breathing | Something is working |
-| amber | Something needs you |
-| red, name dimmed | The page lost its connection to the server |
-
-![Amber beacon: something needs you](images/beacon-needs.png)
-
-![Hollow beacon: nothing running](images/beacon-empty.png)
+In a browser, the tab icon is the tower with its beacon in the fleet's colour, so a background tab tells you whether anything is flying: hollow when no session runs, grey when all are ready, blue while something works, amber when something needs you. The tab title carries the unseen count. In the app itself the mark is just a logo; if the connection to the server is lost it dims and says so on hover.
 
 ## Needs you, and seen
 
@@ -49,8 +39,8 @@ The status line counts the sessions that need you. Click the count, or press `n`
 
 Two kinds of item behave differently:
 
-- **Blocking prompts.** A question dialog (the filled `?`) or a permission request (a `◆`) has the terminal stuck. These count until you answer them in the terminal. Looking at them only stops the pulse.
-- **Follow-ups.** The hollow `?`: the [summarizer](summaries.md) judged that the last reply cannot proceed without you, because it ended with a direct question or asked for a choice or an approval. These are notifications. Once you have looked at one, by opening the session, clicking its row or toast, or picking its project, it leaves the count, its node goes back to grey with an "Asked you: …" line, and it waits under a "seen" divider in the list so you can come back to it. If the session asks something new later, it is unseen again.
+- **Blocking prompts.** A question dialog (the filled bubble) or a permission request (the padlock) has the terminal stuck. These count until you answer them in the terminal. Looking at them only stops the pulse.
+- **Follow-ups.** The hollow bubble: the [summarizer](summaries.md) judged that the last reply cannot proceed without you, because it ended with a direct question or asked for a choice or an approval. These are notifications. Once you have looked at one, by opening the session, clicking its row or toast, or picking its project, it leaves the count, its node goes back to grey with an "Asked you: …" line, and it waits under a "seen" divider in the list so you can come back to it. If the session asks something new later, it is unseen again.
 
 ![A seen follow-up: back to grey, with the question kept on the node](images/seen-followup.png)
 
@@ -84,11 +74,11 @@ The ⚙ in the top right opens settings: theme (follow the system, light or dark
 
 The light theme follows the system by default:
 
-![The page in the light theme](images/light-theme.png)
+![The light theme](images/light-theme.png)
 
 ## Nothing running
 
-With no live session the page says so and tells you how to start one. The beacon is hollow.
+With no live session the app says so and tells you how to start one.
 
 ![Empty state](images/empty.png)
 

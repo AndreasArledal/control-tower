@@ -18,7 +18,7 @@ A summary has a headline, the goal, what is done so far, what is happening now, 
 
 The verdict is judged from the last reply alone. A session is waiting for you only when that reply cannot proceed without you: it ends with a direct question to you, or asks you to choose, approve or provide something before work can continue. Offers such as "I can also do X", suggested next steps, a report of what was done, and questions that only appeared in earlier replies do not count.
 
-A waiting verdict on a session that looks idle makes it a follow-up: it reads "needs you" until you have looked at it. [Using the page](using-the-page.md#needs-you-and-seen) describes what seen does.
+A waiting verdict on a session that looks idle makes it a follow-up: it reads "needs you" until you have looked at it. [Using the app](using-the-app.md#needs-you-and-seen) describes what seen does.
 
 ## Cost and caching
 

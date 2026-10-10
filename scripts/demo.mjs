@@ -284,7 +284,6 @@ if (!flag('--no-shot')) {
     await chrome.capture({ url: S1_URL, out: OUT });
     if (flag('--docs')) {
       const drawer = { x: 992, y: 80, width: 448, height: 820 };
-      await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/beacon-needs.png'), clip: { x: 0, y: 0, width: 560, height: 44 } });
       await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/needs-you-list.png'), clip: { x: 0, y: 0, width: 760, height: 250 }, act: (click) => click('#attention-badge') });
       await chrome.capture({ url: S1_URL, out: join(DOCS, 'images/drawer-summary.png'), clip: drawer });
       await chrome.capture({ url: S1_URL, out: join(DOCS, 'images/transcript.png'), clip: drawer, act: async (click) => { await click('[data-act="transcript"]'); await new Promise((r) => setTimeout(r, 1500)); } });
@@ -294,7 +293,6 @@ if (!flag('--no-shot')) {
       await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/seen-followup.png'), clip: { x: 0, y: 440, width: 760, height: 370 } });
       await chrome.capture({ url: `${url}/`, out: join(DOCS, 'images/needs-you-list-seen.png'), clip: { x: 0, y: 0, width: 760, height: 250 }, act: (click) => click('#attention-badge') });
       empty = await emptyTower(PORT + 1);
-      await chrome.capture({ url: `${empty.url}/`, out: join(DOCS, 'images/beacon-empty.png'), clip: { x: 0, y: 0, width: 560, height: 44 } });
       await chrome.capture({ url: `${empty.url}/`, out: join(DOCS, 'images/empty.png'), scale: 1 });
       await chrome.capture({ url: menuBarPreview(), out: join(DOCS, 'images/menubar-icons.png'), clip: { x: 0, y: 0, width: 640, height: 100 }, settle: 800 });
     }

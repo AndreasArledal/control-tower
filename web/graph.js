@@ -1,4 +1,4 @@
-import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName, uiState, UI_RANK, AGENT_CLASS, sinceTs } from './format.js';
+import { esc, ago, agoCoarse, fit, activityLine, stateLabel, plain, shortModelName, uiState, UI_RANK, AGENT_CLASS, sinceTs, glyphSvg, UI_GLYPH } from './format.js';
 
 export const SESSION_W = 300, SESSION_H = 104, AGENT_W = 224, AGENT_H = 64, FOLD_H = 28, COL_GAP = 40, ROW_GAP = 8, SESSION_GAP = 24, GROUP_GAP_Y = 40, LABEL_H = 28, WRAP_ROWS = 8, WRAP_GAP = 12;
 const RECENT_FINISHED = 3;
@@ -132,19 +132,8 @@ function busPaths(e) {
 
 const AGENT_LABEL = { running: 'running', finished: 'finished', ended: 'ended' };
 
-/** State glyph centred at (x, y), 12px: spinner, filled ? , ◆, hollow ?, hollow ring, ✓, dashed ring. */
-function glyph(kind, x, y) {
-  switch (kind) {
-    case 'working': case 'running': return `<path class="arc" d="M${x - 5},${y} a5,5 0 1 1 5,5"></path>`;
-    case 'question': return `<circle cx="${x}" cy="${y}" r="6" fill="var(--needs)"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:var(--on-needs)">?</text>`;
-    case 'permission': return `<path d="M${x},${y - 6} L${x + 6},${y} L${x},${y + 6} L${x - 6},${y} Z" fill="var(--needs)"></path>`;
-    case 'followup': return `<circle cx="${x}" cy="${y}" r="5.5" fill="none" stroke="var(--needs)" stroke-width="1.5"></circle><text x="${x}" y="${y + 3}" text-anchor="middle" class="glyph" style="fill:var(--needs)">?</text>`;
-    case 'finished': return `<path d="M${x - 5},${y} l3.5,3.5 l6.5,-7" fill="none" stroke="var(--ready)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>`;
-    case 'ready': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--ready)" stroke-width="1.5"></circle>`;
-    case 'ended': return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--ended)" stroke-width="1.5" stroke-dasharray="2.5 2.5"></circle>`;
-    default: return `<circle cx="${x}" cy="${y}" r="5" fill="none" stroke="var(--text-3)" stroke-width="1.5"></circle>`;
-  }
-}
+/** State glyph centred at (x, y); one source for every surface, see glyphSvg. */
+function glyph(kind, x, y, px = 14) { return glyphSvg(kind, px, { x: x - px / 2, y: y - px / 2 }); }
 
 function contextBar(v, x, y, w) {
   if (!v.contextTokens) return '';
@@ -156,7 +145,7 @@ function sessionNode(n, { selected, changed, arrived, now }) {
   const v = n.data, ui = uiState(v);
   const cls = ui === 'exited' ? 'ended' : ui;
   const blocking = v.state === 'question' || v.state === 'permission';
-  const glyphKind = ui === 'needs' ? (blocking ? v.state : 'followup') : cls;
+  const glyphKind = ui === 'needs' ? (blocking ? v.state : 'followup') : (UI_GLYPH[cls] ?? cls);
   const nAgents = v.agents.length, live = v.runningAgents;
   const count = nAgents ? (live ? `${live} of ${nAgents}` : `${nAgents} agent${nAgents === 1 ? '' : 's'}`) : '';
   const countW = count ? count.length * 6.2 + 12 : 0;
@@ -174,7 +163,7 @@ function sessionNode(n, { selected, changed, arrived, now }) {
     ${count ? `<text class="count" x="${n.w - 16}" y="24" text-anchor="end">${esc(count)}</text>` : ''}
     <text class="sub" x="16" y="44">${esc(fit(act, n.w - 32, 12))}</text>
     ${meta ? `<text class="meta" x="16" y="66">${esc(fit(meta, n.w - 32, 11))}</text>` : ''}
-    ${glyph(glyphKind, 22, 86)}
+    ${glyph(glyphKind, 22, 86, 14)}
     <text class="foot ${cls}" x="34" y="90">${esc(fit(label + (since ? ` · ${since}` : ''), 110, 11))}</text>
     ${contextBar(v, 196, 86, 52)}
   </g>`;
@@ -195,7 +184,7 @@ function agentNode(n, { selected, changed, now }) {
     <rect class="rail" width="4" height="${n.h}"></rect>
     <text class="title" x="14" y="20">${esc(title)}</text>
     <text class="sub" x="14" y="38">${esc(fit(line, n.w - 28, 12))}</text>
-    ${glyph(cls, 19, 51)}
+    ${glyph(cls, 19, 51, 12)}
     <text class="foot ${cls}" x="30" y="55">${esc(fit(foot, n.w - 46 - modelW - (kids ? 30 : 0), 11))}</text>
     ${kids ? `<text class="count" x="${n.w - 14 - modelW}" y="55" text-anchor="end">⑂${kids}</text>` : ''}
     ${model ? `<text class="meta" x="${n.w - 14}" y="55" text-anchor="end">${esc(model)}</text>` : ''}
@@ -210,7 +199,6 @@ function moreNode(n) {
   </g>`;
 }
 
-const GROUP_DOT = { needs: 'needs', working: 'working', paused: 'ready', exited: 'ended' };
 
 /**
  * Render into the viewport, touching only what changed: edges/labels are rebuilt when the layout
@@ -227,7 +215,7 @@ export function renderScene(scene, { selected, now, changed, arrived = new Set()
   }
   if (sig !== cache.sig) {
     const parts = [];
-    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})"><circle class="gdot ${GROUP_DOT[l.worst] ?? ''}" cx="4" cy="10" r="4"></circle><text class="group-label" x="16" y="14"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan dx="12">${esc(fit(l.headline, Math.max(160, l.w - 80 - l.name.length * 7.5), 13))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="14" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
+    for (const l of scene.labels) parts.push(`<g class="group" transform="translate(${l.x},${l.y})">${glyphSvg(UI_GLYPH[l.worst] ?? 'ended', 12, { x: -2, y: 4 })}<text class="group-label" x="16" y="14"><tspan class="n">${esc(l.name)}</tspan>${l.headline ? `<tspan dx="12">${esc(fit(l.headline, Math.max(160, l.w - 80 - l.name.length * 7.5), 13))}</tspan>` : ''}</text>${l.n > 1 ? `<text class="group-label c" x="${l.w}" y="14" text-anchor="end">${l.n} sessions</text>` : ''}</g>`);
     for (const e of scene.edges) parts.push(busPaths(e));
     parts.push('<g class="nodes">' + [...nodeHtml.values()].join('\n') + '</g>');
     viewport.innerHTML = parts.join('\n');

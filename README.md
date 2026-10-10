@@ -20,7 +20,7 @@ Options: `--port 4747`, `--no-open`, `--no-summaries`, `--model haiku`.
 ## What you see
 
 - **One graph of everything live.** Sessions grouped by project, agents branching off each session, and a one-line headline per project.
-- **Four states.** Working, needs you, ready for a new prompt, ended. The beacon on the tower mark, in the tab icon and in the menu bar says the same for the whole fleet.
+- **Four states, four symbols.** A spinning arc while working, a nudging speech bubble when a session needs you, a blinking cursor when it is ready for a prompt, a dashed square when ended. The same symbols everywhere: nodes, status line, lists. The tab icon and the menu bar show the fleet's state.
 - **Needs you, in the page only.** A count in the status line, an amber ring on the node, a quiet toast. Sessions whose last reply asked you something stay visible until you have looked at them. No OS notifications.
 - **A summary at a glance.** Click a node for what the session is doing, what it has done, what comes next, its agents, and the full transcript one button away.
 
@@ -35,7 +35,7 @@ npm run install-app        # builds Control Tower.app and copies it to /Applicat
 
 ## Docs
 
-- [Using the page](docs/using-the-page.md): states, the graph, needs you and seen, the drawer and transcript, filters, keys.
+- [Using the app](docs/using-the-app.md): states and their symbols, the graph, needs you and seen, the drawer and transcript, filters, keys. The same however you run it.
 - [Mac app](docs/mac-app.md): install, the window and the menu bar tower, beacon states, toggles.
 - [Hooks](docs/hooks.md): what hooks add, install and uninstall, what is written to settings.json, the fallback.
 - [Summaries](docs/summaries.md): what gets summarised and when, the waiting verdict, cost, caching.

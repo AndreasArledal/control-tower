@@ -60,6 +60,30 @@ export function uiState(v) {
 }
 export const UI_RANK = { needs: 0, working: 1, paused: 2, exited: 3 };
 export const AGENT_CLASS = { running: 'running', done: 'finished', exited: 'ended' };
+/** Display state (or node class) to glyph kind. */
+export const UI_GLYPH = { working: 'working', needs: 'question', paused: 'ready', ready: 'ready', exited: 'ended', ended: 'ended' };
+
+/**
+ * One symbol per state, drawn once here for the canvas and every HTML surface, in a 16-unit box.
+ * Colour and motion live in CSS: the arc spins, the bubble and lock nudge, the cursor blinks.
+ */
+export function glyphInner(kind) {
+  switch (kind) {
+    case 'working': case 'running': return '<path class="arc" d="M8,2.5a5.5,5.5 0 1 1 -5.5,5.5"/>';
+    case 'question': return '<g class="nudge"><path class="bubble" d="M3.5,2h9a2,2 0 0 1 2,2v5.5a2,2 0 0 1 -2,2h-4.5l-3.5,3v-3h-1a2,2 0 0 1 -2,-2v-5.5a2,2 0 0 1 2,-2z"/><text class="mark" x="8" y="9.6" text-anchor="middle">?</text></g>';
+    case 'followup': return '<g class="nudge"><path class="bubble hollow" d="M3.5,2.5h9a1.5,1.5 0 0 1 1.5,1.5v5.5a1.5,1.5 0 0 1 -1.5,1.5h-4.5l-3,2.6v-2.6h-1.5a1.5,1.5 0 0 1 -1.5,-1.5v-5.5a1.5,1.5 0 0 1 1.5,-1.5z"/><text class="mark" x="8" y="9.6" text-anchor="middle">?</text></g>';
+    case 'permission': return '<g class="nudge"><rect class="lock" x="3" y="7" width="10" height="7.5" rx="1.5"/><path class="shackle" d="M5.2,7v-2.2a2.8,2.8 0 0 1 5.6,0v2.2"/></g>';
+    case 'ready': return '<path class="chev" d="M3,4.5l3.5,3.5l-3.5,3.5"/><rect class="cursor" x="9" y="4" width="2.4" height="8.5" rx=".5"/>';
+    case 'finished': return '<path class="check" d="M3,8.5l3.3,3.3l6.7,-7"/>';
+    case 'ended': return '<rect class="stop" x="3.5" y="3.5" width="9" height="9" rx="1.5"/>';
+    default: return '<circle class="ring" cx="8" cy="8" r="5"/>';
+  }
+}
+/** An inline SVG glyph. `still` stops the nudge (a seen follow-up); x/y place it inside another SVG. */
+export function glyphSvg(kind, px = 12, { still = false, x, y } = {}) {
+  const pos = x != null ? ` x="${x}" y="${y}"` : '';
+  return `<svg class="g g-${kind}${still ? ' still' : ''}" width="${px}" height="${px}" viewBox="0 0 16 16" aria-hidden="true"${pos}>${glyphInner(kind)}</svg>`;
+}
 
 /** The timestamp a node and the drawer both show next to the state: when it started asking, when it last replied, or when the state began. */
 export function sinceTs(v) {

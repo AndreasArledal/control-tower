@@ -55,18 +55,30 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .chip:hover { border-color: var(--line-strong); color: var(--text); }
 .chip.selected, .chip.on { background: var(--surface-2); border-color: var(--line-strong); color: var(--text); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); flex: none; }
+/* State glyphs, drawn by glyphSvg(): one symbol per state, used on nodes, in the status line, chips, lists and the drawer.
+   Three motion signatures carry state without colour: the arc spins, the bubble or lock nudges 1px every 4s, the cursor blinks. */
+.g { flex: none; overflow: visible; vertical-align: -2px; }
+.g .arc { fill: none; stroke: var(--working); stroke-width: 2.2; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: spin 1.2s linear infinite; }
+.g .bubble, .g .lock { fill: var(--needs); } .g .bubble.hollow { fill: none; stroke: var(--needs); stroke-width: 1.5; }
+.g .mark { font-size: 9.5px; font-weight: 600; fill: var(--on-needs); } .g-followup .mark { fill: var(--needs); }
+.g .shackle { fill: none; stroke: var(--needs); stroke-width: 1.8; stroke-linecap: round; }
+.g .nudge { transform-box: fill-box; transform-origin: center; animation: nudge 4s ease-in-out infinite; } .g.still .nudge { animation: none; }
+.g .chev { fill: none; stroke: var(--ready); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .g .cursor { fill: var(--ready); animation: blink 1.4s steps(1, end) infinite; }
+.g .check { fill: none; stroke: var(--ready); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.g .stop { fill: none; stroke: var(--ended); stroke-width: 1.5; stroke-dasharray: 2.5 2; }
+.g .ring { fill: none; stroke: var(--text-3); stroke-width: 1.5; }
+.status button.needs.muted .g .bubble.hollow { stroke: var(--text-3); } .status button.needs.muted .g .mark { fill: var(--text-3); }
+.att-item.seen .g .bubble.hollow { stroke: var(--text-3); } .att-item.seen .g .mark { fill: var(--text-3); }
+@keyframes nudge { 0%, 91%, 100% { transform: translateY(0); } 95% { transform: translateY(-1px); } }
+@keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: .18; } }
 .dot.working, .dot.running { background: var(--working); } .dot.needs, .dot.blocking { background: var(--needs); } .dot.ready, .dot.finished, .dot.done { background: var(--ready); } .dot.ended, .dot.exited { background: var(--ended); } .dot.hollow { background: transparent; box-shadow: inset 0 0 0 1px var(--text-3); }
 
 /* top bar */
 .topbar { height: var(--topbar-h); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 0 16px; border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
-.brand .mark-dot { fill: var(--text-3); transition: fill .12s; }
-/* the beacon is the fleet: hollow when nothing runs, grey when all ready, blue breathing while working, amber when something needs you */
-.brand.fleet-empty .mark-dot { fill: none; stroke: var(--text-3); stroke-width: 1.4; }
-.brand.fleet-ready .mark-dot { fill: var(--ready); }
-.brand.fleet-working .mark-dot { fill: var(--working); animation: breathe 2.4s ease-in-out infinite; }
-.brand.fleet-needs .mark-dot { fill: var(--needs); }
-.brand.fleet-offline .mark-dot { fill: var(--error); } .brand.fleet-offline .brand-name { color: var(--text-3); }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text-2); }
+.brand .mark { color: var(--text); } .brand .mark-dot { fill: currentColor; }
+.brand.fleet-offline { opacity: .55; }
+.brand-name { color: var(--text-3); }
 .brand-name { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
 .status { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; font-weight: 500; color: var(--text-2); }
 .status .sep { color: var(--text-3); }
@@ -74,12 +86,10 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .status .st small { font-size: 12px; font-weight: 400; color: var(--text-3); }
 .status button.needs { height: 28px; display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; margin: 0 -8px; border-radius: 6px; color: var(--needs); font-weight: 600; transition: background .12s; }
 .status button.needs:hover, .status button.needs.open { background: var(--surface-2); }
-.status button.needs .dot { background: transparent; box-shadow: inset 0 0 0 1px var(--needs); }
-.status button.needs.unseen .dot { background: var(--needs); box-shadow: none; }
 .status button.needs .caret { color: var(--text-3); transition: transform .12s; }
 .status button.needs.open .caret { transform: rotate(180deg); }
 .status button.needs.flash { animation: flashbg .5s ease-out 1; }
-.status button.needs.muted { color: var(--text-2); font-weight: 500; } .status button.needs.muted .dot { box-shadow: inset 0 0 0 1px var(--text-3); }
+.status button.needs.muted { color: var(--text-2); font-weight: 500; }
 @keyframes flashbg { 0% { background: color-mix(in srgb, var(--needs) 40%, transparent); } 100% { background: transparent; } }
 
 /* filter row */
@@ -106,7 +116,6 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .group-label { font-size: 13px; fill: var(--text-2); }
 .group-label .n { fill: var(--text); font-weight: 600; }
 .group-label.c { font-size: 11px; fill: var(--text-3); }
-.gdot { fill: var(--text-3); } .gdot.working { fill: var(--working); } .gdot.needs { fill: var(--needs); } .gdot.ready { fill: var(--ready); } .gdot.ended { fill: var(--ended); }
 .bus { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linecap: round; }
 .bus.secondary { stroke-dasharray: 2 4; }
 .edge { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linecap: round; }
@@ -132,7 +141,6 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .node text.pct { font-size: 11px; font-weight: 500; fill: var(--text); }
 .node text.foot.working, .node text.foot.running { fill: var(--working); } .node text.foot.needs { fill: var(--needs); } .node text.foot.ready, .node text.foot.finished { fill: var(--ready); } .node text.foot.ended { fill: var(--ended); }
 .node .glyph { font-size: 9px; font-weight: 600; }
-.node .arc { fill: none; stroke: var(--working); stroke-width: 1.6; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ctx-bar { fill: var(--line); } .ctx-fill { fill: var(--text-2); } .ctx-fill.warn { fill: var(--needs); }
 /* session states */
@@ -254,8 +262,6 @@ ul.agents .age { font-size: 11px; color: var(--text-3); }
 .keys kbd { margin-right: 6px; }
 .att-item { width: 100%; min-height: 48px; display: grid; grid-template-columns: 16px 1fr auto; column-gap: 8px; align-items: start; text-align: left; padding: 8px 12px; border-radius: 6px; color: var(--text); transition: background .12s; }
 .att-item:hover { background: var(--surface-2); }
-.att-item .g { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: var(--needs); color: var(--on-needs); font-size: 9px; font-weight: 700; line-height: 12px; text-align: center; }
-.att-item.followup .g { background: transparent; box-shadow: inset 0 0 0 1px var(--needs); color: var(--needs); }
 .att-item .body { min-width: 0; }
 .att-item .t { display: block; font-weight: 500; }
 .att-item .m { display: block; font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -273,8 +279,7 @@ ul.agents .age { font-size: 11px; color: var(--text-3); }
 .toast .m { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand .mark-dot { animation: none; }
-  .node.session.working rect.rail, .edge.running, .node .arc, .spinner, .node.changed rect.box, .node.arrived rect.ring, .status button.needs.flash, .att-item.new { animation: none !important; }
+  .node.session.working rect.rail, .edge.running, .g .arc, .g .nudge, .g .cursor, .spinner, .node.changed rect.box, .node.arrived rect.ring, .status button.needs.flash, .att-item.new { animation: none !important; }
   .drawer, .popover, .toast { animation: none; }
 }
 @media (max-width: 720px) { :root { --drawer-w: 100vw; } .drawer { border-radius: 0; } }

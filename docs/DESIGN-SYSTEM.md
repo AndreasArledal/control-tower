@@ -93,11 +93,13 @@ Elevation: canvas flat; drawer `border-left: 1px --line` + `box-shadow: -8px 0 2
 | canvas pan/zoom (fit, centre) | 200ms ease-out |
 | working rail breathe | 2.4s ease-in-out infinite, opacity .55 to 1, rail and glow only |
 | running edge flow | 1.2s linear infinite, dash offset |
-| spinner glyph | 1.2s linear infinite |
+| spinner glyph (the arc) | 1.2s linear infinite |
+| needs-you glyph (bubble, lock) | 1px lift for 160ms every 4s, ease-in-out; stops once seen |
+| ready glyph (cursor) | blink 1.4s, steps, 55% on |
 | needs-you arrival | one 600ms ring expand on the node; one 500ms background flash on the status segment |
 | state change | one 400ms stroke flash (`.changed`) |
 
-Nothing else loops. Needs-you never pulses continuously; working is the only thing alive. `prefers-reduced-motion: reduce`: every infinite animation off (rail static at full opacity, static arc, solid edges); enters are instant; `animateTo` already snaps.
+Nothing else loops. State is carried by symbol and motion, with colour second: the arc spins (working), the bubble or lock nudges (needs you, until seen), the cursor blinks (ready), the dashed square is still (ended). The nudge is deliberately tiny; it must be noticed, not watched. `prefers-reduced-motion: reduce`: every infinite animation off (rail static at full opacity, static arc, solid edges); enters are instant; `animateTo` already snaps.
 
 ---
 
@@ -110,10 +112,9 @@ x:0  16   38      112                                                 916 944
 ┌────────────────────────────────────────────────────────────────────────┐ 0
 │  ▲ Control Tower  ● 1 working  ·  ○ 2 ready  ·  ● 2 need you ⌄         ⚙  │
 └────────────────────────────────────────────────────────────────────────┘ 44  border-bottom 1px --line
-   mark 18px; its beacon IS the fleet: hollow --text-3 ring when no session runs, --ready filled when all are ready, --working with the 2.4s breathe while anything works,
-   --needs when something waits for you, --error (name in --text-3) when the connection is lost. Precedence in that reverse order. The tooltip spells it out ("2 working · 1 ready").
-   The favicon carries the same beacon colour; the macOS tray carries it as shape (hollow, filled, haloed).
-   "Control Tower" xl. Status: m/500 --text-2; dot 6px in state colour; "·" --text-3 with 12px gaps.
+   mark 28px, static, currentColor: a logo, not an indicator, since the graph and the status line are right there. Connection lost: brand at 55% opacity, tooltip.
+   The favicon carries the fleet state as the beacon's colour (the one place the graph is not visible); the macOS tray carries it as shape (hollow, filled, haloed).
+   "Control Tower" xl. Status: m/500 --text-2; state glyph 12px (arc, cursor, bubble) before each count; "·" --text-3 with 12px gaps.
    "2 need you": m/600 --needs, 28px tall hit area, radius 6, hover --surface-2, caret rotates when open.
    The number is what still needs you: blocking prompts plus unseen follow-ups. Unseen: its dot is filled; all seen: hollow 1px ring.
    When nothing needs you but seen follow-ups remain, the segment reads "asked you" in --text-2/500 with a --text-3 ring, so the list stays reachable.
@@ -149,12 +150,14 @@ x:0  16                                                                  944
 
 ### Canvas
 
+**Glyphs.** One symbol per state, drawn once by `glyphSvg()` in `format.js` and used on nodes (14px sessions, 12px agents), group labels, chips, the status line, the needs-you list and the drawer: working `◠` arc (spins); question: filled speech bubble with `?` (nudges); permission: padlock (nudges); follow-up: hollow bubble with `?` (nudges until seen); ready: `›` with a blinking cursor bar; agent finished: `✓`; ended: dashed square. Colour follows the state token but is never the only cue.
+
 Flat `--bg`, 24px margin, projects in one column, groups 40px apart, no spine. Fit clamps zoom to **[0.75, 1]**; the canvas scrolls instead of shrinking. Constants: `SESSION_W 300, SESSION_H 104, AGENT_W 224, AGENT_H 64, FOLD_H 28, COL_GAP 40, ROW_GAP 8, SESSION_GAP 24, GROUP_GAP_Y 40, LABEL_H 28`. Canvas tools bottom-right: `−  +  fit` in one 28px cluster, `--surface`, 1px `--line`.
 
 ```
 Group label row 28px                                                        x=24
 ● .claude   Redesigning the dashboard UI                      2 sessions
-8px dot (worst state) · name m/600 · headline m --text-2 truncated · count xs --text-3 only if >1
+12px glyph (worst state) · name m/600 · headline m --text-2 truncated · count xs --text-3 only if >1
 
 Session node 300×104 (rail 4, text x=16, right padding 16)
 x: 0 4 16                                         212   284 300

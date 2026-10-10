@@ -13,7 +13,7 @@ Then open Control Tower from Applications. The build is unsigned, so it is meant
 
 ## The window
 
-The app opens the dashboard in a window on launch. It is the same page as in the browser, see [Using the page](using-the-page.md).
+The app opens the dashboard in a window on launch. What you see in it is described in [Using the app](using-the-app.md).
 
 ![The window](screenshot.png)
 
