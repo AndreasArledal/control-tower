@@ -5,7 +5,7 @@ Guides for using Control Tower:
 - [Using the app](using-the-app.md): states and their symbols, the graph, needs you and seen, the drawer and transcript, filters, keys. The same however you run it.
 - [Mac app](mac-app.md): install, the window and the menu bar tower, beacon states, toggles.
 - [Hooks](hooks.md): what hooks add, install and uninstall, what is written to settings.json, the fallback.
-- [Summaries](summaries.md): what gets summarised and when, the waiting verdict, cost, caching, privacy.
+- [Summaries](summaries.md): what gets summarised and when, the waiting verdict, what it costs in tokens, caching, privacy.
 - [How it works](how-it-works.md): data sources, server and page, tests, the demo fixture.
 
 Design records, for anyone changing the code:

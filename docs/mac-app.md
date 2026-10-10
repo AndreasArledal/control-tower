@@ -11,6 +11,8 @@ npm run install-app        # builds Control Tower.app and copies it to /Applicat
 
 Then open Control Tower from Applications. The build is unsigned, so it is meant for the machine it was built on. `npm start` in `app/` runs it from source instead, and `npm run icon` regenerates the menu bar icons.
 
+The app runs with automatic [summaries](summaries.md), which use your Claude account: a small Haiku call every few minutes while a session works, plus once when it finishes or needs you. The menu bar menu switches summaries to on request or off.
+
 ## The window
 
 The app opens the dashboard in a window on launch. What you see in it is described in [Using the app](using-the-app.md).

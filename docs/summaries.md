@@ -1,6 +1,8 @@
 # Summaries
 
-Every session gets a short structured summary, written by Haiku through your own `claude` login, so the page can answer "where is this one" without you reading the transcript.
+Every session gets a short structured summary, written by Haiku through your own `claude` login, so the app can answer "where is this one" without you reading the transcript.
+
+**This uses your Claude account.** Each summary is one small `claude -p` call: a digest of the session goes in, a few hundred tokens of output come back, and it counts against your plan's usage like any other Claude call. Measured at about $0.002 per summary on Haiku, and a working session is summarised every few minutes (four by default), plus once when it finishes or needs you. Settings show the running total. If you would rather spend nothing, start with `--no-summaries` or set the mode to on request or off; everything else works without summaries, except the project headlines fall back to session titles and follow-ups are not detected.
 
 ![A summary in the drawer](images/drawer-summary.png)
 

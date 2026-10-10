@@ -17,6 +17,8 @@ node bin/control-tower.mjs hooks install   # optional: exact "needs you" and "fi
 
 Options: `--port 4747`, `--no-open`, `--no-summaries`, `--model haiku`.
 
+**Summaries use your Claude account.** Each one is a small Haiku call through your own `claude` login, about $0.002 or a few hundred tokens of your plan's usage, every few minutes while a session works, plus once when it finishes or needs you. Start with `--no-summaries`, or set them to on request or off in settings, if you would rather spend nothing. See [Summaries](docs/summaries.md).
+
 ## What you see
 
 - **One graph of everything live.** Sessions grouped by project, agents branching off each session, and a one-line headline per project.
@@ -38,7 +40,7 @@ npm run install-app        # builds Control Tower.app and copies it to /Applicat
 - [Using the app](docs/using-the-app.md): states and their symbols, the graph, needs you and seen, the drawer and transcript, filters, keys. The same however you run it.
 - [Mac app](docs/mac-app.md): install, the window and the menu bar tower, beacon states, toggles.
 - [Hooks](docs/hooks.md): what hooks add, install and uninstall, what is written to settings.json, the fallback.
-- [Summaries](docs/summaries.md): what gets summarised and when, the waiting verdict, cost, caching.
+- [Summaries](docs/summaries.md): what gets summarised and when, the waiting verdict, what it costs in tokens, caching.
 - [How it works](docs/how-it-works.md): data sources, server and page, tests, the demo fixture.
 - [Design](docs/DESIGN.md) and [design system](docs/DESIGN-SYSTEM.md): the internals and the visual rationale.
 
