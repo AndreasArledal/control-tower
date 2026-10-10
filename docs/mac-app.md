@@ -19,6 +19,10 @@ The app opens the dashboard in a window on launch. It is the same page as in the
 
 It behaves like any Mac app: closing the window keeps the app running, and the Dock icon, ⌘-Tab or the menu bar tower bring the window back. ⌘Q quits.
 
+## First run: hooks
+
+Installing the app does not install the [hooks](hooks.md), which give exact "needs you" and "finished" signals. When they are missing the app asks on launch: "Install hooks" adds them, "Later" asks again next time, and "Do not remind me again" stops the dialog. The menu bar menu keeps an "Install Claude Code hooks…" item until they are installed, whichever you chose. The hooks go into the config dir the app is watching, next to any hooks you already have.
+
 ## The menu bar tower
 
 The icon is the tower. Menu bar icons are monochrome, so the beacon on top carries the state in shape:
@@ -33,7 +37,7 @@ The icon is the tower. Menu bar icons are monochrome, so the beacon on top carri
 
 Next to it, a short title: `2 need you`, or `1 working · 2 agents`, or nothing when the fleet is idle.
 
-Click the tower to show or hide the window. Its menu lists the sessions that need you, or the live sessions when nothing does, each opening the dashboard on that session. It also has the summaries mode (automatic, on request, off), "Open in browser", and two toggles:
+Click the tower to show or hide the window. Its menu lists the sessions that need you, or the live sessions when nothing does, each opening the dashboard on that session. It also has "Install Claude Code hooks…" while they are missing, the summaries mode (automatic, on request, off), "Open in browser", and two toggles:
 
 - **Start at login.** Registers the app as a login item.
 - **Menu bar only.** Removes the Dock icon while the window is hidden, for a pure menu bar presence. Remembered across launches.

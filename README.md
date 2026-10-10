@@ -26,7 +26,7 @@ Options: `--port 4747`, `--no-open`, `--no-summaries`, `--model haiku`.
 
 ## Mac app
 
-A desktop app with the server built in: the dashboard in its own window, a tower in the menu bar whose beacon is the fleet, optional start at login.
+A desktop app with the server built in: the dashboard in its own window, a tower in the menu bar whose beacon is the fleet, optional start at login. On first launch it offers to install the hooks.
 
 ```sh
 cd app && npm install      # downloads Electron (about 100 MB), one time

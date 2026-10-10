@@ -1,6 +1,6 @@
 // Control Tower as a macOS menu bar app: the same server, embedded, plus a tray item that shows
 // how many sessions need you and opens the dashboard in a window.
-const { app, Tray, Menu, BrowserWindow, nativeImage, shell } = require('electron');
+const { app, Tray, Menu, BrowserWindow, nativeImage, shell, dialog } = require('electron');
 const http = require('node:http');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
@@ -25,7 +25,8 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let tray, win, tower = null, snap = null, fleet = null;
 
 /** A normal app by default: Dock icon, a window that closing only hides. "Menu bar only" turns the Dock icon off, remembered across launches. */
-const prefs = { menuBarOnly: false };
+const prefs = { menuBarOnly: false, remindHooks: true };
+let hooksInstalled = null, hooksPrompted = false;
 const prefsPath = () => path.join(app.getPath('userData'), 'prefs.json');
 function loadPrefs() { try { Object.assign(prefs, JSON.parse(fs.readFileSync(prefsPath(), 'utf8'))); } catch { /* defaults */ } }
 function savePrefs() { try { fs.mkdirSync(path.dirname(prefsPath()), { recursive: true }); fs.writeFileSync(prefsPath(), JSON.stringify(prefs)); } catch { /* best effort */ } }
@@ -61,7 +62,7 @@ function subscribe() {
 }
 
 function onSnapshot(s) {
-  snap = s;
+  snap = s; hooksInstalled = Boolean(s.hooksInstalled);
   const needs = s.sessions.filter((v) => v.needsYou).length; // blocking prompts and unseen follow-ups, like the page
   const working = s.sessions.filter((v) => v.state === 'working').length;
   const agents = s.sessions.reduce((n, v) => n + v.runningAgents, 0);
@@ -70,6 +71,26 @@ function onSnapshot(s) {
   const next = needs ? 'needs' : s.sessions.some((v) => v.alive) ? 'live' : 'empty';
   if (next !== fleet) { fleet = next; tray.setImage(ICONS[next]); }
   tray.setContextMenu(buildMenu());
+  maybePromptHooks();
+}
+
+/** Hooks give exact needs-you and finished signals; the app offers them once per launch until installed, unless told not to. */
+async function installHooks() {
+  await post('/api/hooks/install');
+  const st = await get('/api/hooks'); hooksInstalled = Boolean(st?.installed);
+  tray.setContextMenu(buildMenu());
+  if (!hooksInstalled) dialog.showErrorBox('Hooks were not installed', 'Control Tower could not update settings.json. Run `control-tower hooks install` in a terminal to see why.');
+}
+async function maybePromptHooks() {
+  if (hooksPrompted || hooksInstalled !== false || prefs.remindHooks === false) return;
+  hooksPrompted = true;
+  const { response, checkboxChecked } = await dialog.showMessageBox({
+    type: 'info', message: 'Install Claude Code hooks?',
+    detail: 'Hooks tell Control Tower the exact moment a session asks you something, waits for a permission, or finishes. They are added to ~/.claude/settings.json next to any hooks you already have, run a four-line script, and never block a session. Sessions already running pick them up after /hooks reload or a restart.',
+    buttons: ['Install hooks', 'Later'], defaultId: 0, cancelId: 1, checkboxLabel: 'Do not remind me again', checkboxChecked: false,
+  });
+  if (checkboxChecked) { prefs.remindHooks = false; savePrefs(); }
+  if (response === 0) await installHooks();
 }
 
 function buildMenu() {
@@ -81,6 +102,7 @@ function buildMenu() {
     for (const v of snap.sessions.filter((x) => x.alive).slice(0, 8)) items.push({ label: `${v.state === 'working' ? '●' : '○'}  ${path.basename(v.cwd)}: ${v.title.slice(0, 60)}`, click: () => showWindow(`#session=${encodeURIComponent(v.id)}`) });
     items.push({ type: 'separator' });
   }
+  if (hooksInstalled === false) items.push({ label: 'Install Claude Code hooks…', click: () => installHooks() }, { type: 'separator' });
   const mode = snap?.summaries.mode ?? 'auto';
   items.push({ label: 'Summaries', submenu: ['auto', 'manual', 'off'].map((m) => ({ label: { auto: 'Automatic', manual: 'On request', off: 'Off' }[m], type: 'radio', checked: mode === m, click: () => post('/api/settings', { summaries: m }) })) });
   items.push({ label: 'Open in browser', click: () => shell.openExternal(BASE) });
