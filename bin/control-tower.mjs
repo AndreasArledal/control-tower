@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { startRadar } from '../server/start.mjs';
+import { startTower } from '../server/start.mjs';
 import { makeHooksCtl } from '../server/hooks-ctl.mjs';
 import { claudeHome } from '../server/paths.mjs';
 
@@ -26,18 +26,18 @@ if (args[0] === 'hooks') {
   process.exit(0);
 }
 
-let radar;
+let tower;
 try {
-  radar = await startRadar({ port: Number(opt('--port', process.env.PORT ?? 4747)), summaries: flag('--no-summaries') ? 'off' : null, model: opt('--model', 'haiku') });
+  tower = await startTower({ port: Number(opt('--port', process.env.PORT ?? 4747)), summaries: flag('--no-summaries') ? 'off' : null, model: opt('--model', 'haiku') });
 } catch (err) {
   console.error(err.code === 'EADDRINUSE' ? `Port is already in use. Is control-tower already running? Try --port.` : err.message);
   process.exit(1);
 }
-const hooks = await radar.hooksCtl.status();
-console.log(`control-tower  ${radar.url}`);
-console.log(`  watching ${radar.home}`);
+const hooks = await tower.hooksCtl.status();
+console.log(`control-tower  ${tower.url}`);
+console.log(`  watching ${tower.home}`);
 console.log(hooks.installed ? '  hooks: installed' : '  hooks: not installed (run `control-tower hooks install` for exact needs-you/done signals)');
-if (!flag('--no-open')) openBrowser(radar.url);
+if (!flag('--no-open')) openBrowser(tower.url);
 
 function openBrowser(url) {
   const cmd = process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url];

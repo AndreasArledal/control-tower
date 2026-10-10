@@ -58,7 +58,7 @@ test('parses ai-title and ignores attachments', () => {
 });
 
 test('tailer returns only new entries and tolerates partial trailing lines', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'radar-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tower-'));
   const f = join(dir, 't.jsonl');
   writeFileSync(f, L({ ...base, type: 'user', message: { role: 'user', content: 'one' } }) + '\n');
   const t = new TranscriptTailer(f);
@@ -87,7 +87,7 @@ test('empty thinking blocks are dropped', () => {
 });
 
 test('a multibyte character split across two reads is decoded intact', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'radar-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tower-'));
   const f = join(dir, 'u.jsonl');
   const line = Buffer.from(L({ ...base, type: 'user', message: { role: 'user', content: 'Klart 🎉 bra' } }) + '\n');
   const cut = line.indexOf('🎉') + 2; // inside the 4-byte emoji
@@ -100,6 +100,6 @@ test('a multibyte character split across two reads is decoded intact', async () 
 });
 
 test('tailer survives the file vanishing between polls', async () => {
-  const t = new TranscriptTailer('/nonexistent/radar/t.jsonl');
+  const t = new TranscriptTailer('/nonexistent/tower/t.jsonl');
   assert.deepEqual(await t.poll(), []);
 });

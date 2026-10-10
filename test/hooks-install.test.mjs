@@ -1,19 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeHooks, removeHooks, hasRadarHooks, RADAR_EVENTS } from '../server/hooks-install.mjs';
+import { mergeHooks, removeHooks, hasTowerHooks, TOWER_EVENTS } from '../server/hooks-install.mjs';
 
 const existing = { model: 'x', hooks: { WorktreeCreate: [{ matcher: '', hooks: [{ type: 'command', command: '~/.claude/hooks/on-worktree-create.sh' }] }] } };
 
-test('mergeHooks adds radar hooks for every event and keeps existing hooks and settings', () => {
+test('mergeHooks adds tower hooks for every event and keeps existing hooks and settings', () => {
   const out = mergeHooks(existing, '/home/u/.claude/control-tower/hook.sh');
   assert.equal(out.model, 'x');
   assert.equal(out.hooks.WorktreeCreate[0].hooks[0].command, '~/.claude/hooks/on-worktree-create.sh');
-  for (const ev of RADAR_EVENTS) assert.ok(out.hooks[ev], `missing ${ev}`);
+  for (const ev of TOWER_EVENTS) assert.ok(out.hooks[ev], `missing ${ev}`);
   const stop = out.hooks.Stop.find((g) => g.hooks.some((h) => h.command.includes('control-tower')));
   assert.ok(stop);
   assert.equal(stop.hooks[0].async, true);
-  assert.equal(hasRadarHooks(out), true);
-  assert.equal(hasRadarHooks(existing), false);
+  assert.equal(hasTowerHooks(out), true);
+  assert.equal(hasTowerHooks(existing), false);
   assert.deepEqual(existing.hooks.WorktreeCreate.length, 1, 'input not mutated');
 });
 

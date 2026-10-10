@@ -53,7 +53,7 @@ Agents: `done` on `SubagentStop`, on the parent's tool result (foreground agents
 
 ## Summaries
 
-Triggered automatically when a live session is first seen and whenever it enters `done`/`question`/`permission`; manually from the drawer; never when the mode is `off`. Project headlines are requested whenever the set of live sessions or their summaries change, keyed accordingly, and fall back to session titles. One job at a time, 20 s cooldown per session, cached by `session:entryCount:state`. The digest is bounded (first prompt, last three prompts, last reply, last twelve tool calls, agents). Output is JSON `{headline, progress, needs}` enforced with `--json-schema`.
+Triggered automatically when a live session is first seen, whenever it enters `done`/`question`/`permission`, and every `summaryRefreshMinutes` (default 4) while it keeps working; manually from the drawer; never when the mode is `off`. Project headlines are requested whenever the set of live sessions or their summaries change, keyed accordingly, and fall back to session titles. One job at a time, 20 s cooldown per session, cached by `v2:session:entryCount:state`. The digest is bounded (first prompt, last five prompts, last three replies, last twenty tool calls, agents). Output is JSON `{headline, goal, done, now, next, status, waiting_for}` enforced with `--json-schema`; `status` is the follow-up verdict described above.
 
 ## Terminal focus
 

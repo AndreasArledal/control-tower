@@ -21,7 +21,7 @@ async function readBody(req) {
  * Plain node:http server: static UI from webDir, a JSON API over the store, and one SSE stream
  * that pushes a fresh snapshot whenever the store changes.
  */
-export function createRadarServer({ store, webDir, hooksCtl }) {
+export function createTowerServer({ store, webDir, hooksCtl }) {
   const clients = new Set();
   const send = (snap) => { const data = `event: snapshot\ndata: ${JSON.stringify(snap)}\n\n`; for (const c of clients) c.write(data); };
   store.on('change', send);

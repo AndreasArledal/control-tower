@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir, copyFile, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mergeHooks, removeHooks, hasRadarHooks } from './hooks-install.mjs';
-import { radarDir } from './paths.mjs';
+import { mergeHooks, removeHooks, hasTowerHooks } from './hooks-install.mjs';
+import { towerDir } from './paths.mjs';
 
 const HOOK_SRC = fileURLToPath(new URL('../hooks/hook.sh', import.meta.url));
 
@@ -14,18 +14,18 @@ async function readSettings(home) {
 }
 
 async function backup(settingsPath) {
-  try { await copyFile(settingsPath, settingsPath + '.radar-backup'); } catch { /* no settings yet */ }
+  try { await copyFile(settingsPath, settingsPath + '.control-tower-backup'); } catch { /* no settings yet */ }
 }
 
 /** Installs the spool hook script under <home>/control-tower and registers it in settings.json (backup kept). */
 export function makeHooksCtl(home) {
   const settingsPath = join(home, 'settings.json');
-  const hookPath = join(radarDir(home), 'hook.sh');
+  const hookPath = join(towerDir(home), 'hook.sh');
   return {
     hookPath,
-    async status() { return { installed: hasRadarHooks(await readSettings(home)), hookPath, settingsPath }; },
+    async status() { return { installed: hasTowerHooks(await readSettings(home)), hookPath, settingsPath }; },
     async install() {
-      await mkdir(join(radarDir(home), 'events'), { recursive: true });
+      await mkdir(join(towerDir(home), 'events'), { recursive: true });
       await copyFile(HOOK_SRC, hookPath); await chmod(hookPath, 0o755);
       const current = await readSettings(home);
       await backup(settingsPath);

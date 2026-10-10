@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { RadarStore } from '../server/store.mjs';
+import { TowerStore } from '../server/store.mjs';
 import { encodeProjectDir } from '../server/paths.mjs';
 
 const L = (o) => JSON.stringify(o) + '\n';
 const base = (sid, i) => ({ uuid: 'u' + i, parentUuid: i ? 'u' + (i - 1) : null, timestamp: new Date(1_700_000_000_000 + i * 1000).toISOString(), sessionId: sid, isSidechain: false, cwd: '/p/a' });
 
 function fakeHome() {
-  const home = mkdtempSync(join(tmpdir(), 'radar-home-'));
+  const home = mkdtempSync(join(tmpdir(), 'tower-home-'));
   mkdirSync(join(home, 'sessions'));
   const proj = join(home, 'projects', encodeProjectDir('/p/a'));
   mkdirSync(proj, { recursive: true });
@@ -34,7 +34,7 @@ function fakeHome() {
 
 test('store builds projects, sessions, agents and reacts to hook events', async () => {
   const { home, sid, transcript } = fakeHome();
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   let clock = 1_700_000_000_000 + 10_000;
   store._now = () => clock;
   await store.tick();
@@ -92,7 +92,7 @@ test('a background agent is not finished just because its launch call returned',
   const agents = join(proj, sid, 'subagents');
   writeFileSync(join(agents, 'agent-abc.meta.json'), JSON.stringify({ agentType: 'Explore', description: 'Scout the repo', toolUseId: 'tu-agent', spawnDepth: 1, requestShape: 'background' }));
   appendFileSync(transcript, L({ ...base(sid, 2), type: 'user', toolUseResult: {}, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu-agent', content: 'Async agent launched successfully.' }] } }));
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   await store.tick();
   assert.equal(store.snapshot().sessions[0].agents[0].state, 'running');
   appendFileSync(join(agents, 'agent-abc.jsonl'),
@@ -106,7 +106,7 @@ test('a background agent is not finished just because its launch call returned',
 test('store treats a session whose process is gone as exited', async () => {
   const { home, sid } = fakeHome();
   writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: 999999, sessionId: sid, cwd: '/p/a', name: 'a-1', status: 'idle', startedAt: 1 }));
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   await store.tick();
   assert.equal(store.snapshot().sessions[0].state, 'exited');
   store.stop();
@@ -114,7 +114,7 @@ test('store treats a session whose process is gone as exited', async () => {
 
 test('hook events that pile up between ticks are applied in write order, not name order', async () => {
   const { home, sid, transcript } = fakeHome();
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
   await store.tick();
   const spool = join(home, 'control-tower', 'events'); mkdirSync(spool, { recursive: true });
@@ -130,7 +130,7 @@ test('hook events that pile up between ticks are applied in write order, not nam
 
 test('timeline pages by seq and survives the entry cap', async () => {
   const { home, sid } = fakeHome();
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   await store.tick();
   const all = store.timeline(sid, null, { after: -1, limit: 10 });
   assert.deepEqual(all.entries.map((e) => e.seq), [0, 1, 2]);
@@ -145,7 +145,7 @@ test('projects carry a headline: session titles by default, the summarizer resul
   const { home, sid } = fakeHome();
   const results = [];
   const fakeSummarizer = { available: true, lastError: null, lastRunAt: new Map(), cached: () => null, isQueued: () => false, request: (id, key, digestFn) => { results.push({ id, key, digest: digestFn() }); return true; } };
-  const store = new RadarStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto' } });
+  const store = new TowerStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto' } });
   await store.tick();
   assert.equal(store.snapshot().projects[0].headline, 'Building it');
   const job = results.find((r) => r.id === 'project:/p/a');
@@ -160,7 +160,7 @@ test('a working session gets its summary refreshed once it is older than the ref
   const { home, sid } = fakeHome();
   const requests = [];
   const fakeSummarizer = { available: true, lastError: null, lastRunAt: new Map(), cached: () => null, isQueued: () => false, request: (id, key) => { requests.push({ id, key }); return true; } };
-  const store = new RadarStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto', summaryRefreshMinutes: 1 } });
+  const store = new TowerStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto', summaryRefreshMinutes: 1 } });
   let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
   await store.tick();
   const first = requests.filter((r) => r.id === sid).length;
@@ -178,7 +178,7 @@ test('a working session gets its summary refreshed once it is older than the ref
 test('a session the summarizer judges as waiting for the user needs attention and keeps its project active', async () => {
   const { home, sid } = fakeHome();
   writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: sid, cwd: '/p/a', name: 'a-1', status: 'idle', startedAt: 1 }));
-  const store = new RadarStore({ home, summarizer: null });
+  const store = new TowerStore({ home, summarizer: null });
   let clock = 1_700_000_000_000 + 3 * 60 * 60 * 1000; store._now = () => clock; // three hours later: past the active window
   await store.tick();
   assert.equal(store.snapshot().sessions[0].state, 'idle');

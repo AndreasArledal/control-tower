@@ -6,8 +6,8 @@ import { readRegistry } from './registry.mjs';
 import { TranscriptTailer } from './transcript.mjs';
 import { SessionModel, resolveState, resolveAgentState } from './model.mjs';
 import { normalizeHookEvent, applyHookEvent, emptyHookState } from './hook-events.mjs';
-import { hasRadarHooks } from './hooks-install.mjs';
-import { transcriptPathFor, projectsDir, radarDir } from './paths.mjs';
+import { hasTowerHooks } from './hooks-install.mjs';
+import { transcriptPathFor, projectsDir, towerDir } from './paths.mjs';
 import { buildDigest, buildProjectDigest } from './summarizer.mjs';
 import { focusProcess } from './focus.mjs';
 
@@ -48,14 +48,14 @@ class SessionRecord {
  * The in-memory picture of every Claude Code session on this machine. tick() pulls from the
  * registry, transcripts, subagent dirs and the hook spool; snapshot() is what the UI renders.
  */
-export class RadarStore extends EventEmitter {
+export class TowerStore extends EventEmitter {
   constructor({ home, summarizer = null, settings = {} }) {
     super();
     this.home = home; this.summarizer = summarizer;
     this.settings = { summaries: 'auto', summaryRefreshMinutes: DEFAULT_REFRESH_MIN, ...settings }; // summaries: auto | manual | off
     this.sessions = new Map();
-    this.spoolDir = join(radarDir(home), 'events');
-    this.stateFile = join(radarDir(home), 'state.json');
+    this.spoolDir = join(towerDir(home), 'events');
+    this.stateFile = join(towerDir(home), 'state.json');
     this.projectSummaries = new Map(); // cwd -> { headline, at, key }
     this.seen = new Map(); // sessionId -> stateSince the user has looked at
     this._now = () => Date.now();
@@ -72,7 +72,7 @@ export class RadarStore extends EventEmitter {
   stop() { if (this._timer) clearInterval(this._timer); this._timer = null; }
 
   hooksInstalled() {
-    try { return hasRadarHooks(JSON.parse(require_sync(join(this.home, 'settings.json')))); } catch { return false; }
+    try { return hasTowerHooks(JSON.parse(require_sync(join(this.home, 'settings.json')))); } catch { return false; }
   }
 
   async tick() {
@@ -94,7 +94,7 @@ export class RadarStore extends EventEmitter {
     const list = await readRegistry(this.home);
     const seen = new Set();
     for (const r of list) {
-      if (r.cwd && r.cwd.startsWith(radarDir(this.home))) continue; // our own summarizer runs
+      if (r.cwd && r.cwd.startsWith(towerDir(this.home))) continue; // our own summarizer runs
       seen.add(r.sessionId);
       const s = this._session(r.sessionId);
       s.pid = r.pid; s.cwd = r.cwd; s.name = r.name ?? s.name; s.startedAt = r.startedAt ?? s.startedAt; s.kind = r.kind;
@@ -131,7 +131,7 @@ export class RadarStore extends EventEmitter {
     for (const { raw, at } of files) {
       const e = raw && normalizeHookEvent(raw, at);
       if (!e || !e.sessionId) continue;
-      if (e.cwd && e.cwd.startsWith(radarDir(this.home))) continue;
+      if (e.cwd && e.cwd.startsWith(towerDir(this.home))) continue;
       this.hooksSeen = true;
       const s = this._session(e.sessionId);
       s.hooksSeen = true;
@@ -431,7 +431,7 @@ export class RadarStore extends EventEmitter {
 
   async _saveState() {
     const seen = Object.fromEntries([...this.seen].slice(-200));
-    try { await mkdir(radarDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings, seen })); } catch { /* best effort */ }
+    try { await mkdir(towerDir(this.home), { recursive: true }); await writeFile(this.stateFile, JSON.stringify({ settings: this.settings, seen })); } catch { /* best effort */ }
   }
 }
 

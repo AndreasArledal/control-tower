@@ -21,15 +21,15 @@ function fixPath() {
 
 const PORT = Number(process.env.PORT || 4747);
 const BASE = `http://127.0.0.1:${PORT}`;
-let tray, win, radar = null, snap = null;
+let tray, win, tower = null, snap = null;
 
 const get = (p) => new Promise((resolve) => { http.get(BASE + p, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => { try { resolve(JSON.parse(b)); } catch { resolve(null); } }); }).on('error', () => resolve(null)); });
 const post = (p, body) => new Promise((resolve) => { const req = http.request(BASE + p, { method: 'POST', headers: { 'content-type': 'application/json' } }, (res) => { res.resume(); res.on('end', resolve); }); req.on('error', resolve); req.end(body ? JSON.stringify(body) : undefined); });
 
 async function ensureServer() {
   if (await get('/api/health')) return 'already running';
-  const { startRadar } = await import('../server/start.mjs');
-  radar = await startRadar({ port: PORT, onError: (e) => console.error('[tower]', e.message) });
+  const { startTower } = await import('../server/start.mjs');
+  tower = await startTower({ port: PORT, onError: (e) => console.error('[tower]', e.message) });
   return 'embedded';
 }
 
@@ -102,8 +102,8 @@ app.whenReady().then(async () => {
   const how = await ensureServer();
   console.log(`control-tower menu bar: server ${how} at ${BASE}`);
   subscribe();
-  if (process.env.RADAR_SMOKE) setTimeout(() => app.quit(), Number(process.env.RADAR_SMOKE));
+  if (process.env.TOWER_SMOKE) setTimeout(() => app.quit(), Number(process.env.TOWER_SMOKE));
 });
-app.on('before-quit', () => { app.isQuitting = true; radar?.close(); });
+app.on('before-quit', () => { app.isQuitting = true; tower?.close(); });
 app.on('window-all-closed', () => { /* stay in the menu bar */ });
 app.on('activate', () => showWindow()); // Dock click or ⌘-Tab while hidden

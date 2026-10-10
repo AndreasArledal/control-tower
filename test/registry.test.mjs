@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { readRegistry, isPidAlive } from '../server/registry.mjs';
 
 test('readRegistry lists sessions and marks liveness by pid', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'radar-home-'));
+  const home = mkdtempSync(join(tmpdir(), 'tower-home-'));
   mkdirSync(join(home, 'sessions'));
   writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 's-live', cwd: '/p/a', name: 'a-1', status: 'busy', startedAt: 5, kind: 'interactive', version: '2.1.0' }));
   writeFileSync(join(home, 'sessions', '999999.json'), JSON.stringify({ pid: 999999, sessionId: 's-dead', cwd: '/p/b', name: 'b-1', status: 'idle', startedAt: 6 }));

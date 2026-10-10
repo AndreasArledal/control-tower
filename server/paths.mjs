@@ -20,6 +20,6 @@ export function transcriptPathFor(home, cwd, sessionId) {
 }
 
 /** Where Control Tower keeps its own state (hook spool, summaries, settings). */
-export function radarDir(home) {
+export function towerDir(home) {
   return join(home, 'control-tower');
 }
