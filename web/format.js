@@ -57,17 +57,33 @@ export function verdict(v) {
 
 /**
  * The four states the page speaks in, derived from the server's finer ones:
- * working · needs you (blocked on a prompt, or the last reply asked you something) ·
+ * working · needs you (blocked on a prompt, or the last reply asked you something and you have not looked yet) ·
  * paused (turn ended, waiting for your next prompt; the summary says where it stands) · ended.
  * No "finished": a model reading one reply cannot know whether you intend to continue.
  */
 export function uiState(v) {
   if (!v.alive) return 'exited';
   if (v.state === 'working') return 'working';
-  if (v.state === 'question' || v.state === 'permission' || v.followUp) return 'needs';
+  if (v.state === 'question' || v.state === 'permission' || (v.followUp && !v.followUp.seen)) return 'needs';
   return 'paused';
 }
 export const UI_RANK = { needs: 0, working: 1, paused: 2, exited: 3 };
+
+/**
+ * The whole fleet in one word, for the beacon on the mark, the tab icon and the tray.
+ * Precedence: offline · needs (something waits for you) · working (a session or agent runs) · ready (alive, idle) · empty (nothing running).
+ */
+export function fleetState(snap, connected = true) {
+  if (!connected) return { state: 'offline', label: 'Connection lost, reconnecting…' };
+  const live = (snap?.sessions ?? []).filter((v) => v.alive);
+  if (!live.length) return { state: 'empty', label: 'No session running. Start one with claude.' };
+  const needs = live.filter((v) => v.needsYou).length;
+  const working = live.filter((v) => !v.needsYou && (v.state === 'working' || v.runningAgents > 0)).length;
+  const ready = live.length - needs - working;
+  if (needs) return { state: 'needs', label: `${needs} need${needs === 1 ? 's' : ''} you${working ? ` · ${working} working` : ''}` };
+  if (working) return { state: 'working', label: `${working} working${ready ? ` · ${ready} ready` : ''}` };
+  return { state: 'ready', label: `${live.length} session${live.length === 1 ? '' : 's'}, all ready for a prompt` };
+}
 
 export function stateLabel(s) { return STATE_LABEL[s] ?? s; }
 
@@ -75,7 +91,7 @@ export function activityLine(v) {
   const a = v.activity ?? {};
   if (v.state === 'question') return a.label || v.stateMessage || 'Waiting for your answer';
   if (v.state === 'permission') return v.stateMessage || 'Waiting for permission';
-  if (v.followUp && (v.state === 'done' || v.state === 'idle')) return clip(plain(v.followUp.reason), 90);
+  if (v.followUp && (v.state === 'done' || v.state === 'idle')) return (v.followUp.seen ? 'Asked you: ' : '') + clip(plain(v.followUp.reason), 90);
   if (v.state === 'done' || v.state === 'idle') return clip(plain(v.summary?.now || v.lastAssistantText) || 'Waiting for your next prompt', 90);
   if (v.state === 'exited') return 'Session ended';
   if (a.kind === 'tool') return `${a.tool}: ${a.label || ''}`;

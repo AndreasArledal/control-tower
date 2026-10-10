@@ -40,7 +40,7 @@ class SessionRecord {
     this.transcriptPath = null; this.tailer = null; this.model = new SessionModel(); this.entries = []; this.seq = 0;
     this.hooks = emptyHookState(); this.hooksSeen = false; this.attentionCount = null; this.agents = new Map(); this.agentsScanAt = 0;
     this.summary = null; this.summaryKey = null; this.summaryError = null; this.loaded = false; this.lastState = null;
-    this.summarizedForState = null; this.pinned = false;
+    this.summarizedForState = null; this.pinned = false; this.summaryWanted = null;
   }
 }
 
@@ -250,10 +250,12 @@ export class TowerStore extends EventEmitter {
     const act = r.state === 'working' ? m.activity() : (r.state === 'question' ? { kind: 'question', label: r.message ?? '', since: r.since } : { kind: 'idle', label: '', since: r.since });
     // the summarizer's verdict: the last reply left a question or decision with the user, so this session is not finished even if it looks idle
     const judgedWaiting = s.alive && (r.state === 'idle' || r.state === 'done') && s.summary?.status === 'waiting_for_user' && (s.summary.at ?? 0) >= (m.lastAssistantAt ?? 0) - 1000;
-    const followUp = judgedWaiting ? { reason: s.summary.waitingFor || s.summary.next || 'Waiting for your reply', since: m.lastAssistantAt ?? s.summary.at } : null;
+    // a follow-up is a soft signal: once the user has looked at it, it stops counting (blocking prompts never stop counting)
+    const followUpSince = m.lastAssistantAt ?? s.summary?.at ?? null;
+    const followUp = judgedWaiting ? { reason: s.summary.waitingFor || s.summary.next || 'Waiting for your reply', since: followUpSince, seen: (this.seen.get(s.id) ?? -1) >= (followUpSince ?? 0) } : null;
     return {
       id: s.id, pid: s.pid, name: s.name, title: m.title, cwd: s.cwd, projectId: s.cwd, alive: s.alive, kind: s.kind,
-      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: r.state === 'question' || r.state === 'permission' || Boolean(followUp), followUp,
+      state: r.state, stateSince: r.since ?? null, stateMessage: r.message ?? null, needsYou: r.state === 'question' || r.state === 'permission' || Boolean(followUp && !followUp.seen), followUp,
       activity: act, lastPrompt: clip(m.lastPrompt, 400), lastPromptAt: m.lastPromptAt, firstPrompt: clip(m.firstPrompt, 400),
       lastAssistantText: clip(s.hooks.lastMessage && r.state === 'done' ? s.hooks.lastMessage : m.lastAssistantText, 600), lastAssistantAt: m.lastAssistantAt,
       lastActivityAt: m.lastActivityAt, startedAt: s.startedAt ?? m.firstActivityAt, turns: m.turns, toolCalls: m.toolCalls, errors: m.errors,
@@ -285,10 +287,10 @@ export class TowerStore extends EventEmitter {
       p.headline = ps?.headline || fallbackHeadline(mine);
       p.headlineSource = ps ? 'summary' : 'titles';
       // active: something is happening, or someone touched it recently
-      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || v.followUp || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
+      p.active = mine.some((v) => v.alive && (v.state !== 'idle' || (v.followUp && !v.followUp.seen) || (v.lastActivityAt && this._now() - v.lastActivityAt < ACTIVE_WINDOW_MS)));
     }
     const projects = [...byProject.values()].sort((a, b) => (b.needsYou - a.needsYou) || (b.live - a.live) || (b.lastActivityAt - a.lastActivityAt));
-    const attention = sessions.filter((v) => v.needsYou).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
+    const attention = sessions.filter((v) => v.needsYou || v.followUp).sort((a, b) => (b.stateSince ?? 0) - (a.stateSince ?? 0))
       .map((v) => { const blocking = v.state === 'question' || v.state === 'permission'; const since = blocking ? v.stateSince : v.followUp.since; return { sessionId: v.id, projectName: basename(v.cwd), sessionName: v.name, title: v.title, state: blocking ? v.state : 'followup', since, message: blocking ? v.stateMessage : v.followUp.reason, seen: (this.seen.get(v.id) ?? -1) >= (since ?? 0) }; });
     const unseen = attention.filter((a) => !a.seen).length;
     return {
@@ -337,15 +339,18 @@ export class TowerStore extends EventEmitter {
 
   summaryKey(s) { return `v2:${s.id}:${s.model.count}:${s.lastState}`; }
 
-  requestSummary(id, { force = false } = {}) {
+  /** afterRun: a run for this session just finished, so the cooldown does not apply. */
+  requestSummary(id, { force = false, afterRun = false } = {}) {
     const s = this.sessions.get(id);
     if (!s || !this.summarizer) return false;
     const last = this.summarizer.lastRunAt.get(id) ?? 0;
-    if (!force && this._now() - last < SUMMARY_COOLDOWN_MS) return false;
+    if (!force && !afterRun && this._now() - last < SUMMARY_COOLDOWN_MS) return false;
     if (!force && s.summary && s.summaryKey === this.summaryKey(s)) return false;
     const key = this.summaryKey(s);
     const cached = this.summarizer.cached(key);
     if (cached && !force) { s.summary = cached; s.summaryKey = key; return false; }
+    // a run for an older state is in flight: the summarizer refuses a second job per session, so remember to come back
+    if (this.summarizer.isQueued(id)) { s.summaryWanted = key; return false; }
     return this.summarizer.request(id, key, () => buildDigest(this._sessionView(s), s.entries), { force });
   }
 
@@ -353,6 +358,7 @@ export class TowerStore extends EventEmitter {
     if (id.startsWith('project:')) { this.projectSummaries.set(id.slice(8), { ...summary, key }); this._version = ''; this.emit('change', this.snapshot()); return; }
     const s = this.sessions.get(id); if (!s) return;
     s.summary = summary; s.summaryKey = key; s.summaryError = null; this._version = ''; this.emit('change', this.snapshot());
+    if (s.summaryWanted && s.summaryWanted !== key) { s.summaryWanted = null; this.requestSummary(id, { afterRun: true }); }
   }
 
   onSummaryError(id, err) {

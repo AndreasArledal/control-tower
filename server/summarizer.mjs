@@ -12,7 +12,7 @@ export const SUMMARY_SCHEMA = {
     done: { type: 'array', items: { type: 'string' }, description: 'Up to 5 short bullets of what has been accomplished so far, most recent last' },
     now: { type: 'string', description: 'One sentence: what is happening right now, or what it ended with' },
     next: { type: 'string', description: 'One sentence: what comes next, or what the user must decide or provide; empty if nothing' },
-    status: { type: 'string', enum: ['working', 'waiting_for_user', 'complete'], description: 'working: the assistant is still executing. waiting_for_user: its last reply asks a question, offers options, requests a decision, approval or input, or says it will continue once the user replies. complete: the last reply closes the task and asks nothing.' },
+    status: { type: 'string', enum: ['working', 'waiting_for_user', 'complete'], description: 'Judged from the last reply alone. working: the assistant is still executing. waiting_for_user: the last reply cannot proceed without the user: it ends with a direct question to them, or asks them to choose, approve or provide something before work can continue. Not waiting: offers like "I can also do X", suggested next steps, a report of what was done, or questions that only appeared in earlier replies. complete: the last reply closes the task and asks nothing.' },
     waiting_for: { type: 'string', description: 'If waiting_for_user: in one short sentence, exactly what the user is being asked; otherwise empty' },
     progress: { type: 'string', description: 'For project digests only: leave empty' },
     needs: { type: 'string', description: 'Leave empty' },
@@ -20,12 +20,13 @@ export const SUMMARY_SCHEMA = {
   required: ['headline', 'goal', 'done', 'now', 'next', 'status', 'waiting_for'],
 };
 
-export const SYSTEM_PROMPT = 'You write status-board summaries of AI coding sessions for the engineer who runs them, who has several running at once and wants to know what is going on and how far along each one is. Be concrete: name files, features, decisions, numbers. Plain language, no filler, never mention that you are summarizing. Answer only with the requested JSON.';
+export const SYSTEM_PROMPT = 'You write status-board summaries of AI coding sessions for the engineer who runs them, who has several running at once and wants to know what is going on and how far along each one is. Be concrete: name files, features, decisions, numbers. Plain language, no filler, never mention that you are summarizing. Judge status from the last reply only; earlier replies are context. Answer only with the requested JSON.';
 
 /** Compact, bounded text digest of one session for the summarizer model. */
 export function buildDigest(view, entries, agentEntries = []) {
   const prompts = entries.filter((e) => e.kind === 'prompt').slice(-5).map((e) => '- ' + clip(e.text, 400));
   const replies = entries.filter((e) => e.kind === 'text' && e.text?.trim()).slice(-3).map((e) => '- ' + clip(e.text, 700));
+  const lastReply = replies.pop();
   const tools = entries.filter((e) => e.kind === 'tool_use').slice(-20).map((e) => `- ${e.tool.name}: ${clip(toolLabel(e.tool.name, e.tool.input), 110)}`);
   const agents = (view.agents ?? []).map((a) => `- ${clip(a.description || a.type || a.id, 100)} (${a.type ?? 'agent'}, ${a.state})${a.lastText ? ': ' + clip(a.lastText, 200) : ''}`);
   const parts = [
@@ -35,7 +36,8 @@ export function buildDigest(view, entries, agentEntries = []) {
     `Turns: ${view.turns}, tool calls: ${view.toolCalls}`,
     `First request from the user:\n${clip(view.firstPrompt, 600)}`,
     prompts.length ? `Most recent requests from the user:\n${prompts.join('\n')}` : '',
-    replies.length ? `Most recent replies from the assistant (oldest first):\n${replies.join('\n')}` : '',
+    replies.length ? `Earlier replies from the assistant (oldest first):\n${replies.join('\n')}` : '',
+    lastReply ? `Last reply (judge status from this one alone):\n${lastReply}` : '',
     view.activity?.label ? `Right now: ${view.activity.kind === 'tool' ? view.activity.tool + ' — ' : ''}${clip(view.activity.label, 160)}` : '',
     tools.length ? `Recent tool calls:\n${tools.join('\n')}` : '',
     agents.length ? `Subagents:\n${agents.join('\n')}` : '',

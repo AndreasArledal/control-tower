@@ -44,6 +44,17 @@ Reload the browser to pick up `web/` changes. Restart the server for `server/` c
 - Keep server and web dependency-free. Only `app/` has (dev) dependencies, for Electron.
 - Default port 4747; `PORT` env is honoured. The Electron app attaches to an already-running server on that
   port instead of starting its own.
+- Screenshots: Chrome's own `--screenshot` mode hangs on the page because the SSE stream never closes.
+  Drive Chrome over the DevTools protocol instead; `screenshot()` in `scripts/demo.mjs` is the working pattern.
+  `node scripts/demo.mjs --keep --no-shot --port 4751` serves the fixture for manual or scripted checks; `curl`
+  can hit the API (no Origin header passes the same-origin guard), e.g. `POST /api/session/<id>/seen`.
+  If the script is killed hard, its `sleep 3600` children are orphaned; kill them.
+- The user usually has a real instance on port 4747. Its page picks up `web/` changes on reload, but it runs
+  the old `server/` code until restarted. To debug a live session: `GET /api/state`, `GET
+  /api/timeline?session=<id>&after=<seq>&limit=100`, and the summary cache at `~/.claude/control-tower/summaries.json`
+  (keys `v2:<session>:<entryCount>:<state>`). Snapshot timestamps are milliseconds.
+- Store tests use a hand-rolled fake summarizer (`available, lastError, lastRunAt, cached, isQueued, request`).
+  It must track in-flight ids as a set: project summaries share the queue and would otherwise overwrite a single slot.
 
 ## Style
 

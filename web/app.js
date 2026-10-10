@@ -1,4 +1,4 @@
-import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK } from './format.js';
+import { esc, ago, tokens, duration, stateLabel, activityLine, shortModelName, clip, shortPath, plain, uiState, UI_RANK, fleetState } from './format.js';
 import { buildScene, renderScene } from './graph.js';
 import { StreamView, renderMarkdown } from './stream.js';
 
@@ -31,16 +31,27 @@ function connect() {
   es.addEventListener('snapshot', (ev) => { onSnapshot(JSON.parse(ev.data)); setConnected(true); });
   es.onerror = () => setConnected(false);
 }
-function setConnected(on) {
-  const b = $('brand');
-  b.classList.toggle('live-on', on); b.classList.toggle('live-off', !on);
-  b.title = on ? 'Live' : 'Connection lost, reconnecting…';
+function setConnected(on) { state.connected = on; applyFleet(); }
+
+/** The beacon on the mark and the tab icon say what the fleet is doing; the tooltip spells it out. */
+const FLEET_COLOUR = { offline: '#E5655F', needs: '#F0A93B', working: '#5EA2E6', ready: '#52B08E', empty: null };
+function faviconFor(f) {
+  const c = FLEET_COLOUR[f];
+  const beacon = c ? `<circle cx="16" cy="5" r="2.8" fill="${c}"/>` : `<circle cx="16" cy="5" r="2.2" fill="none" stroke="#9AA3B2" stroke-width="1.3"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0D1117"/><g fill="#9AA3B2">${beacon}<path d="M16 7.5v2.5" stroke="#9AA3B2" stroke-width="2" stroke-linecap="round"/><path d="M6.5 10h19l-2.5 7h-14z"/><path d="M13 17h6v10h-6z" opacity=".75"/><path d="M9.5 28.5h13" stroke="#9AA3B2" stroke-width="2.4" stroke-linecap="round"/></g></svg>`;
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+function applyFleet(snap = state.snap) {
+  const { state: f, label } = fleetState(snap, state.connected !== false);
+  const b = $('brand'); b.className = `brand fleet-${f}`; b.title = label;
+  if (f !== state.fleet) { state.fleet = f; $('favicon').href = faviconFor(f); }
 }
 
 function onSnapshot(snap) {
   state.snap = snap;
   for (const v of snap.sessions) { const byId = new Map(v.agents.map((a) => [a.id, 0])); for (const a of v.agents) if (a.parentAgentId && byId.has(a.parentAgentId)) byId.set(a.parentAgentId, byId.get(a.parentAgentId) + 1); for (const a of v.agents) a.children = byId.get(a.id) ?? 0; }
   document.title = (snap.unseen ? `(${snap.unseen}) ` : '') + 'Control Tower';
+  applyFleet(snap);
   $('summaries-mode').value = snap.summaries.mode;
   $('summaries-refresh').value = String(snap.summaries.refreshMinutes ?? 4);
   const sp = snap.summaries.spend;
@@ -79,9 +90,11 @@ function renderStatus(snap) {
   const parts = [];
   if (n('working')) parts.push(`<span class="st"><span class="dot working"></span>${n('working')} working${agents ? ` <small>+${agents} agent${agents === 1 ? '' : 's'}</small>` : ''}</span>`);
   if (n('paused')) parts.push(`<span class="st"><span class="dot hollow"></span>${n('paused')} ready</span>`);
-  const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length;
+  // the segment counts what still needs you (blocking prompts, unseen follow-ups); seen follow-ups only keep the list reachable
+  const total = snap.attention.length, unseen = snap.attention.filter((a) => !a.seen).length, need = snap.sessions.filter((v) => v.needsYou).length;
   const open = !$('attention-pop').hidden;
-  if (total) parts.push(`<button class="needs ${unseen ? 'unseen' : ''} ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="${unseen ? `${unseen} new` : 'Sessions that need you'}"><span class="dot"></span>${total} need${total === 1 ? 's' : ''} you <span class="caret">⌄</span></button>`);
+  if (need) parts.push(`<button class="needs ${unseen ? 'unseen' : ''} ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="${unseen ? `${unseen} new` : 'Sessions that need you'}"><span class="dot"></span>${need} need${need === 1 ? 's' : ''} you <span class="caret">⌄</span></button>`);
+  else if (total) parts.push(`<button class="needs muted ${open ? 'open' : ''}" id="attention-badge" aria-haspopup="true" aria-expanded="${open}" title="Questions you have seen"><span class="dot"></span>asked you <span class="caret">⌄</span></button>`);
   $('status').innerHTML = live.length ? parts.join('<span class="sep">·</span>') : '<span class="st"><span class="dot hollow"></span>no sessions running</span>';
   $('attention-badge')?.addEventListener('click', () => togglePop('attention-pop'));
   if (state.prevAttention != null && unseen > state.prevAttention) { const b = $('attention-badge'); if (b) { b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); } }
@@ -99,12 +112,17 @@ function positionPop() {
 function renderAttentionPop() {
   const snap = state.snap, now = Date.now();
   const before = state.popSeen;
-  $('attention-pop').innerHTML = `<div class="pop-head"><span>Needs you</span><button class="icon-btn" data-close aria-label="Close">${ICON.close}</button></div>` + (snap.attention.map((a) => `
+  // blocking prompts and unseen follow-ups first; follow-ups you have looked at wait under a divider, like read notifications
+  const row = (a) => `
     <button class="att-item ${a.state} ${a.seen ? 'seen' : ''} ${!a.seen && !before.has(a.sessionId + ':' + a.since) ? 'new' : ''}" data-focus="${esc(a.sessionId)}">
       <span class="g">${a.state === 'permission' ? '◆' : '?'}</span>
       <span class="body"><span class="t">${esc(a.projectName)} · ${esc(a.state === 'followup' ? 'in the last reply' : stateLabel(a.state))}</span><span class="m">${esc(plain(a.message || a.title))}</span></span>
       <span class="age">${ago(a.since, now)}</span>
-    </button>`).join('') || '<p class="hint" style="padding:8px 12px">Nothing needs you right now.</p>');
+    </button>`;
+  const live = snap.attention.filter((a) => a.state !== 'followup' || !a.seen), seen = snap.attention.filter((a) => a.state === 'followup' && a.seen);
+  $('attention-pop').innerHTML = `<div class="pop-head"><span>Needs you</span><button class="icon-btn" data-close aria-label="Close">${ICON.close}</button></div>`
+    + (live.map(row).join('') || '<p class="hint" style="padding:8px 12px">Nothing needs you right now.</p>')
+    + (seen.length ? `<div class="att-divider">seen</div>` + seen.map(row).join('') : '');
   state.popSeen = new Set(snap.attention.map((a) => a.sessionId + ':' + a.since));
   $('attention-pop').querySelector('[data-close]').addEventListener('click', () => { $('attention-pop').hidden = true; renderStatus(snap); });
   positionPop();
@@ -284,7 +302,7 @@ function renderSessionHead(v, now) {
   const sinceTs = ui === 'needs' && v.followUp && !blocking ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
   const pct = v.contextTokens ? Math.round(100 * Math.min(1, v.contextTokens / (v.contextTokens > 190_000 ? 1_000_000 : 200_000))) : null;
   const stats = [pct != null ? stat(`${pct}%`, 'context') : null, stat(String(v.turns), v.turns === 1 ? 'turn' : 'turns'), stat(String(v.toolCalls), 'tools'), v.agents.length ? stat(String(v.agents.length), v.agents.length === 1 ? 'agent' : 'agents') : null, v.startedAt ? stat(duration(now - v.startedAt), '') : null].filter(Boolean).join(' · ') + (v.errors ? ` · <span class="err">${v.errors} error${v.errors === 1 ? '' : 's'}</span>` : '');
-  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp && ui === 'needs' ? plain(v.followUp.reason) : '';
+  const msg = v.state === 'question' ? `Asks: ${v.stateMessage || v.activity.label || ''}` : v.state === 'permission' ? (v.stateMessage || 'Waiting for a permission decision in the terminal') : v.followUp ? (v.followUp.seen ? 'Asked you: ' : '') + plain(v.followUp.reason) : '';
   $('drawer-head').innerHTML = `
     <div class="row"><h2 title="${esc(v.title)}">${esc(v.title)}</h2><button class="icon-btn" data-act="close" title="Close (Esc)" aria-label="Close">${ICON.close}</button></div>
     <div class="state-row"><span class="st ${cls}">${cls === 'working' ? '<span class="spinner"></span>' : `<span class="dot ${cls}"></span>`}${esc(blocking ? stateLabel(v.state) : SESSION_LABEL[ui])}${sinceTs ? ' · ' + ago(sinceTs, now) : ''}</span>${v.model ? `<span>· ${esc(shortModelName(v.model))}${v.effort ? ' · ' + esc(v.effort) + ' effort' : ''}</span>` : ''}</div>
@@ -444,7 +462,7 @@ function setupUI() {
       case 'Escape': if (!$('attention-pop').hidden || !$('settings-pop').hidden) closePops(); else close(); break;
       case 'f': fitView(); break;
       case 'F': if (openDrawer && state.transcriptOpen) stream.setFollow(!stream.follow); break;
-      case 'n': { const next = state.snap?.attention.find((a) => !a.seen) ?? state.snap?.attention[0]; if (next) focusSession(next.sessionId); break; }
+      case 'n': { const next = state.snap?.attention.find((a) => !a.seen) ?? state.snap?.attention.find((a) => a.state !== 'followup'); if (next) focusSession(next.sessionId); break; }
       case '0': pickProject('active', false); break;
       case 'e': toggleExited(); break;
       case '+': case '=': $('zoom-in').click(); break;

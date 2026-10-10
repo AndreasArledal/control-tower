@@ -61,7 +61,12 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .topbar { height: var(--topbar-h); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 0 16px; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
 .brand .mark-dot { fill: var(--text-3); transition: fill .12s; }
-.brand.live-on .mark-dot { fill: var(--ready); } .brand.live-off .mark-dot { fill: var(--error); }
+/* the beacon is the fleet: hollow when nothing runs, grey when all ready, blue breathing while working, amber when something needs you */
+.brand.fleet-empty .mark-dot { fill: none; stroke: var(--text-3); stroke-width: 1.4; }
+.brand.fleet-ready .mark-dot { fill: var(--ready); }
+.brand.fleet-working .mark-dot { fill: var(--working); animation: breathe 2.4s ease-in-out infinite; }
+.brand.fleet-needs .mark-dot { fill: var(--needs); }
+.brand.fleet-offline .mark-dot { fill: var(--error); } .brand.fleet-offline .brand-name { color: var(--text-3); }
 .brand-name { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
 .status { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; font-weight: 500; color: var(--text-2); }
 .status .sep { color: var(--text-3); }
@@ -74,6 +79,7 @@ select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 28
 .status button.needs .caret { color: var(--text-3); transition: transform .12s; }
 .status button.needs.open .caret { transform: rotate(180deg); }
 .status button.needs.flash { animation: flashbg .5s ease-out 1; }
+.status button.needs.muted { color: var(--text-2); font-weight: 500; } .status button.needs.muted .dot { box-shadow: inset 0 0 0 1px var(--text-3); }
 @keyframes flashbg { 0% { background: color-mix(in srgb, var(--needs) 40%, transparent); } 100% { background: transparent; } }
 
 /* filter row */
@@ -255,6 +261,7 @@ ul.agents .age { font-size: 11px; color: var(--text-3); }
 .att-item .m { display: block; font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .att-item .age { font-size: 11px; color: var(--text-3); padding-top: 2px; }
 .att-item.seen .t { color: var(--text-2); }
+.att-divider { padding: 8px 12px 2px; font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
 .att-item.new { animation: flashbg .5s ease-out 1; }
 
 /* toasts */
@@ -266,6 +273,7 @@ ul.agents .age { font-size: 11px; color: var(--text-3); }
 .toast .m { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
+  .brand .mark-dot { animation: none; }
   .node.session.working rect.rail, .edge.running, .node .arc, .spinner, .node.changed rect.box, .node.arrived rect.ring, .status button.needs.flash, .att-item.new { animation: none !important; }
   .drawer, .popover, .toast { animation: none; }
 }

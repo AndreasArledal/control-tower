@@ -194,3 +194,60 @@ test('a session the summarizer judges as waiting for the user needs attention an
   assert.equal(store.snapshot().unseen, 0);
   store.stop();
 });
+
+test('a seen follow-up stops counting and stops keeping its project active, but stays listed as seen', async () => {
+  const { home, sid } = fakeHome();
+  writeFileSync(join(home, 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: sid, cwd: '/p/a', name: 'a-1', status: 'idle', startedAt: 1 }));
+  const store = new TowerStore({ home, summarizer: null });
+  let clock = 1_700_000_000_000 + 3 * 60 * 60 * 1000; store._now = () => clock;
+  await store.tick();
+  store.sessions.get(sid).summary = { headline: 'h', goal: '', done: [], now: '', next: '', status: 'waiting_for_user', waitingFor: 'Choose option A or B', at: clock };
+  assert.equal(store.snapshot().projects[0].active, true);
+  store.markSeen(sid);
+  const snap = store.snapshot();
+  assert.equal(snap.sessions[0].needsYou, false, 'a seen follow-up no longer needs you');
+  assert.equal(snap.sessions[0].followUp.reason, 'Choose option A or B', 'the question is kept');
+  assert.equal(snap.sessions[0].followUp.seen, true);
+  assert.equal(snap.attention.length, 1, 'still listed');
+  assert.equal(snap.attention[0].seen, true);
+  assert.equal(snap.unseen, 0);
+  assert.equal(snap.projects[0].active, false, 'no longer keeps the project active');
+  store.stop();
+});
+
+test('a seen blocking question still needs you: the terminal is stuck until it is answered', async () => {
+  const { home, sid, transcript } = fakeHome();
+  appendFileSync(transcript, L({ ...base(sid, 2), type: 'assistant', message: { id: 'm3', role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'tu-q', name: 'AskUserQuestion', input: { questions: [{ question: 'Port 80 or 8080?' }] } }] } }));
+  const store = new TowerStore({ home, summarizer: null });
+  await store.tick();
+  assert.equal(store.snapshot().sessions[0].state, 'question');
+  store.markSeen(sid);
+  const snap = store.snapshot();
+  assert.equal(snap.sessions[0].needsYou, true);
+  assert.equal(snap.attention[0].seen, true);
+  assert.equal(snap.unseen, 0);
+  assert.equal(snap.projects[0].active, true);
+  store.stop();
+});
+
+test('a state change while a summary is in flight is summarised again once that run finishes', async () => {
+  const { home, sid } = fakeHome();
+  mkdirSync(join(home, 'control-tower', 'events'), { recursive: true });
+  const requests = []; const running = new Set();
+  const fakeSummarizer = { available: true, lastError: null, lastRunAt: new Map(), cached: () => null, isQueued: (id) => running.has(id), request: (id, key) => { if (running.has(id)) return false; requests.push({ id, key }); running.add(id); return true; } };
+  const store = new TowerStore({ home, summarizer: fakeSummarizer, settings: { summaries: 'auto' } });
+  let clock = 1_700_000_000_000 + 10_000; store._now = () => clock;
+  await store.tick();
+  const first = requests.find((r) => r.id === sid);
+  assert.ok(first, 'summarised on first sight');
+  writeFileSync(join(home, 'control-tower', 'events', 'stop.json'), JSON.stringify({ hook_event_name: 'Stop', session_id: sid, cwd: '/p/a' }));
+  clock += 1000; await store.tick();
+  assert.equal(store.snapshot().sessions[0].state, 'done');
+  assert.equal(requests.filter((r) => r.id === sid).length, 1, 'the second request is refused while the first run is in flight');
+  running.delete(sid); fakeSummarizer.lastRunAt.set(sid, clock);
+  store.onSummary(sid, { headline: 'h', goal: '', done: [], now: '', next: '', status: 'working', at: clock }, first.key);
+  const mine = requests.filter((r) => r.id === sid);
+  assert.equal(mine.length, 2, 're-requested when the run finished');
+  assert.match(mine[1].key, /:done$/);
+  store.stop();
+});

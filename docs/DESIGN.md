@@ -43,11 +43,13 @@ Per session, in priority order:
 
 Attention clears when a new prompt arrives, or (for permissions) when the transcript moves past the prompt. `done` is a plain status; "seen" (opening the session, clicking its toast or badge item, picking its project) only removes it from the count.
 
-Follow-up: each session summary carries `status` (working / waiting_for_user / complete) and `waitingFor`. A live session that is idle or done with a verdict of waiting_for_user newer than its last reply gets `followUp`, which counts as needing you, renders as "needs you" in amber (soft dashed ring, no pulse), and keeps its project active regardless of the one-hour window.
+Follow-up: each session summary carries `status` (working / waiting_for_user / complete) and `waitingFor`, judged from the last reply alone: waiting means the reply cannot proceed without the user (a direct question, or a choice or approval to give), not an offer or a list of next steps. A live session that is idle or done with a verdict of waiting_for_user newer than its last reply gets `followUp`. Unseen, it counts as needing you, renders as "needs you" in amber (soft dashed ring, no pulse), and keeps its project active regardless of the one-hour window. Once seen it is a notification you have read: it stops counting, stops keeping the project active, the node goes back to ready with an "Asked you: …" line, and it stays in the needs-you list under a "seen" divider. Blocking prompts (question, permission) are state, not notifications, and count until answered.
 
-Display states: the page derives five mutually exclusive states from the server's (`web/format.js` `uiState`): working; needs you (question, permission, or follow-up); finished (done, or a reply within the last hour with nothing asked); idle (over an hour quiet); ended.
+A summary requested while another run for the same session is in flight is remembered and requested again when that run finishes, so a verdict never sticks to a state it was not computed for.
 
-Visibility: Active mode shows projects with any live session that is not idle, has a follow-up, or had activity within the last hour. Ended sessions are hidden unless toggled or opened from the recent list.
+Display states: the page derives five mutually exclusive states from the server's (`web/format.js` `uiState`): working; needs you (question, permission, or unseen follow-up); finished (done, or a reply within the last hour with nothing asked); idle (over an hour quiet); ended.
+
+Visibility: Active mode shows projects with any live session that is not idle, has an unseen follow-up, or had activity within the last hour. Ended sessions are hidden unless toggled or opened from the recent list.
 
 Agents: `done` on `SubagentStop`, on the parent's tool result (foreground agents only; background launches return immediately), or on a final `end_turn` text with no pending tool calls; `exited` with the session; otherwise `running`.
 
@@ -65,7 +67,7 @@ Plain ES modules, no build. Visual design per `docs/DESIGN-SYSTEM.md`: top bar, 
 
 ## Menu bar app
 
-`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The window is the same page.
+`app/main.cjs` (Electron) embeds the server via `start.mjs` unless one is already on the port, subscribes to the SSE stream, and renders a template tray icon whose title is the number of sessions that need you. The icon's beacon carries the fleet state in shape, since template icons are monochrome: hollow when nothing runs, filled when sessions are alive, haloed when something needs you (`app/make-icon.mjs` generates the three). The window is the same page.
 
 ## Tree layout
 

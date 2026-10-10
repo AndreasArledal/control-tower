@@ -21,7 +21,9 @@ function fixPath() {
 
 const PORT = Number(process.env.PORT || 4747);
 const BASE = `http://127.0.0.1:${PORT}`;
-let tray, win, tower = null, snap = null;
+let tray, win, tower = null, snap = null, fleet = null;
+/** Template icons are monochrome, so the beacon's shape carries the state: hollow (nothing running), filled (sessions alive), haloed (something needs you). */
+const ICONS = Object.fromEntries([['empty', 'iconTemplate.png'], ['live', 'iconLiveTemplate.png'], ['needs', 'iconNeedsTemplate.png']].map(([k, f]) => { const i = nativeImage.createFromPath(path.join(__dirname, f)); i.setTemplateImage(true); return [k, i]; }));
 
 const get = (p) => new Promise((resolve) => { http.get(BASE + p, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => { try { resolve(JSON.parse(b)); } catch { resolve(null); } }); }).on('error', () => resolve(null)); });
 const post = (p, body) => new Promise((resolve) => { const req = http.request(BASE + p, { method: 'POST', headers: { 'content-type': 'application/json' } }, (res) => { res.resume(); res.on('end', resolve); }); req.on('error', resolve); req.end(body ? JSON.stringify(body) : undefined); });
@@ -52,11 +54,13 @@ function subscribe() {
 
 function onSnapshot(s) {
   snap = s;
-  const needs = s.unseen ?? s.attention.length;
+  const needs = s.sessions.filter((v) => v.needsYou).length; // blocking prompts and unseen follow-ups, like the page
   const working = s.sessions.filter((v) => v.state === 'working').length;
   const agents = s.sessions.reduce((n, v) => n + v.runningAgents, 0);
   tray.setTitle(needs ? ` ${needs} need${needs === 1 ? 's' : ''} you` : working ? ` ${working}${agents ? `+${agents}` : ''}` : '');
   tray.setToolTip(`Control Tower — ${s.sessions.filter((v) => v.alive).length} live sessions, ${needs} waiting for you`);
+  const next = needs ? 'needs' : s.sessions.some((v) => v.alive) ? 'live' : 'empty';
+  if (next !== fleet) { fleet = next; tray.setImage(ICONS[next]); }
   tray.setContextMenu(buildMenu());
 }
 
@@ -93,9 +97,7 @@ function showWindow(hash = '') {
 app.whenReady().then(async () => {
   fixPath();
   if (process.platform === 'darwin') app.dock?.hide();
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'iconTemplate.png'));
-  icon.setTemplateImage(true);
-  tray = new Tray(icon);
+  tray = new Tray(ICONS.empty);
   tray.setToolTip('Control Tower');
   tray.setContextMenu(buildMenu());
   tray.on('click', () => { if (win?.isVisible()) win.hide(); else showWindow(); });

@@ -161,7 +161,7 @@ function sessionNode(n, { selected, changed, arrived, now }) {
   const sinceTs = ui === 'needs' && v.followUp && !blocking ? v.followUp.since : ui === 'paused' ? (v.lastAssistantAt ?? v.stateSince) : v.stateSince;
   const since = sinceTs ? agoCoarse(sinceTs, now) : '';
   const label = ui === 'needs' ? 'needs you' : ui === 'paused' ? 'ready' : ui === 'exited' ? 'ended' : 'working';
-  const act = cls === 'ended' ? `Ended${since ? ' ' + since + ' ago' : ''}` : cls === 'ready' && v.summary?.headline ? v.summary.headline : plain(activityLine(v));
+  const act = cls === 'ended' ? `Ended${since ? ' ' + since + ' ago' : ''}` : cls === 'ready' && v.summary?.headline && !v.followUp ? v.summary.headline : plain(activityLine(v));
   const meta = [shortModelName(v.model), v.effort ? `${v.effort} effort` : null].filter(Boolean).join(' · ');
   return `<g class="node session ${cls} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''} ${arrived ? 'arrived' : ''}" transform="translate(${n.x},${n.y})" data-session="${esc(v.id)}" tabindex="0" role="button" aria-label="${esc(v.title)}, ${esc(label)}">
     ${selected || arrived ? `<rect class="ring" x="-3" y="-3" width="${n.w + 6}" height="${n.h + 6}"></rect>` : ''}

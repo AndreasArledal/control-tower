@@ -110,10 +110,13 @@ x:0  16   38      112                                                 916 944
 ┌────────────────────────────────────────────────────────────────────────┐ 0
 │  ▲ Control Tower  ● 1 working  ·  ○ 2 ready  ·  ● 2 need you ⌄         ⚙  │
 └────────────────────────────────────────────────────────────────────────┘ 44  border-bottom 1px --line
-   mark 18px; its centre dot IS the live indicator (--ready live, --error lost, --text-3 connecting). No separate live-dot.
+   mark 18px; its beacon IS the fleet: hollow --text-3 ring when no session runs, --ready filled when all are ready, --working with the 2.4s breathe while anything works,
+   --needs when something waits for you, --error (name in --text-3) when the connection is lost. Precedence in that reverse order. The tooltip spells it out ("2 working · 1 ready").
+   The favicon carries the same beacon colour; the macOS tray carries it as shape (hollow, filled, haloed).
    "Control Tower" xl. Status: m/500 --text-2; dot 6px in state colour; "·" --text-3 with 12px gaps.
    "2 need you": m/600 --needs, 28px tall hit area, radius 6, hover --surface-2, caret rotates when open.
-   Unseen: its dot is filled; all seen: hollow 1px ring. That is the whole seen indicator.
+   The number is what still needs you: blocking prompts plus unseen follow-ups. Unseen: its dot is filled; all seen: hollow 1px ring.
+   When nothing needs you but seen follow-ups remain, the segment reads "asked you" in --text-2/500 with a --text-3 ring, so the list stays reachable.
    Settings: 28×28 icon button, --text-2, hover --text.
 
 Needs-you list (click the segment), left-anchored to it, top = segment bottom + 6, width 320:
@@ -123,6 +126,8 @@ Needs-you list (click the segment), left-anchored to it, top = segment bottom + 
 │ ?  ai-enablement · has a question    1m  │ row 48px, padding 8 12; glyph = 12px filled --needs circle (◆ for permission, hollow ? for follow-up)
 │    Which port should the server use?     │ title m/500; message s --text-2 one line; age xs --text-3
 │ ?  worky · in the last reply         4m  │ hover --surface-2; seen rows: title --text-2
+│ SEEN                                     │ divider xs/500 uppercase --text-3, only when seen follow-ups exist
+│ ?  atlas · in the last reply        1h   │ seen follow-ups live here: read notifications, out of the count
 └──────────────────────────────────────────┘ radius 6, elevation 2
 ```
 
@@ -275,7 +280,7 @@ Centred, max-width 360: title l/500 `--text`, body m `--text-2`, `code` in `--su
 
 **Selection.** Click a node: open its drawer; click the selected node or empty canvas: close. Switching nodes swaps the drawer in place. `Esc` closes a popover first, then the drawer. Selection never changes layout.
 
-**Seen.** A needs-you item is seen when its node is opened, its toast is clicked, it is picked from the needs-you list, or its project chip is clicked exclusively. There is no button. Seen only affects the status-line dot, the toast and the list row tint; node appearance is driven by state alone, so marking seen never animates anything.
+**Seen.** A needs-you item is seen when its node is opened, its toast is clicked, it is picked from the needs-you list, or its project chip is clicked exclusively. There is no button. For a blocking prompt, seen only affects the status-line dot, the toast and the list row tint: the terminal is still stuck, so it keeps counting. For a follow-up, seen means read: it leaves the count and the Active rule, moves under the list's "seen" divider, and its node returns to ready with an "Asked you: …" line. A new ask from the same session is a new item, unseen again. Marking seen never animates anything.
 
 **What moves the canvas.** Only: fit (`f`, double-click, button), filter change, opening a session that is off-screen (from `n`, the list, a toast, or recent sessions), and zoom. **Never:** snapshot refresh, selection, seen, drawer open/close, agent state change, fold expand (nodes insert in place; the user pans).
 

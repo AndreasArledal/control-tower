@@ -42,3 +42,10 @@ test('Summarizer runs one job at a time, caches by key and reports results', asy
   assert.ok(Math.abs(s.spend.usd - 0.004) < 1e-9);
   assert.equal(s.spend.todayCount, 2);
 });
+
+test('buildDigest sets the last reply apart from earlier ones so the status verdict is judged on it alone', () => {
+  const d = buildDigest(view, [...entries, { kind: 'text', text: 'First I will look at the CSS.' }, { kind: 'text', text: 'Done, it is blue now.' }]);
+  assert.match(d, /Last reply \(judge status from this one alone\):\n- Done, it is blue now\./);
+  assert.match(d, /Earlier replies[^\n]*:\n- First I will look at the CSS\./);
+  assert.ok(d.indexOf('Earlier replies') < d.indexOf('Last reply'), 'the last reply comes last');
+});
