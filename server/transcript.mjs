@@ -73,7 +73,16 @@ function parseUser(line, i) {
   if (!text) return [];
   const injected = line.isMeta || line.origin?.kind === 'system' || line.isCompactSummary
     || /^\s*<(task-notification|system-reminder|local-command|command-name|bash-input|bash-stdout)/.test(text);
-  return [{ ...entryBase(line, i, injected ? 'notice' : 'prompt'), text }];
+  return [{ ...entryBase(line, i, injected ? 'notice' : 'prompt'), text: slashCommand(text) ?? text }];
+}
+
+/** Built-in commands log `<command-name>` first (a notice), typed skills `<command-message>` first (a prompt). */
+function slashCommand(text) {
+  if (!/^\s*<command-(name|message)>/.test(text)) return null;
+  const name = /<command-name>([^<]*)<\/command-name>/.exec(text)?.[1].trim();
+  if (!name) return null;
+  const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1].trim();
+  return args ? `${name} ${args}` : name;
 }
 
 function parseAssistant(line, i) {

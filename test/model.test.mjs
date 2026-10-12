@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SessionModel, resolveState, resolveAgentState } from '../server/model.mjs';
+import { parseLine } from '../server/transcript.mjs';
 
 const T0 = Date.parse('2026-10-09T07:00:00Z');
 const e = (kind, extra = {}, i = 0, ts = T0 + i * 1000) => ({ i, ts, kind, uuid: 'u' + i, parentUuid: null, agentId: null, ...extra });
@@ -37,6 +38,14 @@ test('model falls back to the first prompt as title', () => {
   m.ingest(e('prompt', { text: 'A very long first prompt that goes on and on and should be truncated for a title somewhere sensible' }, 0));
   assert.ok(m.title.length <= 60);
   assert.ok(m.title.startsWith('A very long first prompt'));
+});
+
+test('a session opened with a slash command after /clear is titled by the command', () => {
+  const m = new SessionModel();
+  const line = (content, extra) => JSON.stringify({ type: 'user', timestamp: '2026-09-07T05:22:19Z', message: { role: 'user', content }, ...extra });
+  for (const e of parseLine(line('<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>'), 0)) m.ingest(e);
+  for (const e of parseLine(line('<command-message>cost-log</command-message>\n<command-name>/cost-log</command-name>', { origin: { kind: 'human' } }), 1)) m.ingest(e);
+  assert.equal(m.title, '/cost-log');
 });
 
 test('activity reports the running tool, thinking, responding, or question', () => {
