@@ -43,6 +43,25 @@ test('treats system-injected user text as notice, not prompt', () => {
   assert.equal(e[0].kind, 'notice');
 });
 
+test('a typed slash command is a prompt that reads as typed', () => {
+  const e = parseLine(L({ ...base, type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: '<command-message>cost-log</command-message>\n<command-name>/cost-log</command-name>' } }), 0);
+  assert.equal(e[0].kind, 'prompt');
+  assert.equal(e[0].text, '/cost-log');
+  const withArgs = parseLine(L({ ...base, type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: '<command-message>doctor</command-message>\n<command-name>/doctor</command-name>\n<command-args>  hooks only </command-args>' } }), 1);
+  assert.equal(withArgs[0].text, '/doctor hooks only');
+});
+
+test('a built-in slash command stays a notice, without its tags', () => {
+  const e = parseLine(L({ ...base, type: 'user', message: { role: 'user', content: '<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>' } }), 0);
+  assert.equal(e[0].kind, 'notice');
+  assert.equal(e[0].text, '/clear');
+});
+
+test('a prompt that only mentions command tags is left alone', () => {
+  const text = 'why does <command-name>/x</command-name> show up?';
+  assert.equal(parseLine(L({ ...base, type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: text } }), 0)[0].text, text);
+});
+
 test('a queued task notification attachment becomes a notice', () => {
   const e = parseLine(L({ ...base, type: 'attachment', attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>', timestamp: '2026-10-09T07:23:10.636Z' } }), 9);
   assert.equal(e.length, 1);
