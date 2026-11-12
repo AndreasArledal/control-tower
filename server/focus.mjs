@@ -18,9 +18,9 @@ export function parseWezTermClients(json) {
  * Pure planner: given what we know (terminal app, the process's tty, pane listings), return the
  * commands to run in order. Keeping this pure makes the per-terminal logic testable.
  */
-export function planFocus({ terminal, tty, pid, cwd, panes = [], tmuxPanes = '', custom = null, platform = process.platform, activeWorkspace = null }) {
+export function planFocus({ terminal, tty, pid, cwd, sessionId, panes = [], tmuxPanes = '', custom = null, platform = process.platform, activeWorkspace = null }) {
   if (custom) {
-    const cmd = custom.replace(/\{(tty|pid|cwd|sessionId)\}/g, (_, k) => shq({ tty, pid, cwd }[k] ?? ''));
+    const cmd = custom.replace(/\{(tty|pid|cwd|sessionId)\}/g, (_, k) => shq({ tty, pid, cwd, sessionId }[k] ?? ''));
     return [['sh', '-c', cmd]];
   }
   const raise = platform === 'darwin' && APP_NAMES[terminal] ? [['open', '-a', APP_NAMES[terminal]]] : [];
@@ -105,7 +105,7 @@ async function detectTerminal(pid) {
 }
 
 /** Bring the terminal pane that runs this Claude process to the front. Best effort; reports what it did. */
-export async function focusProcess({ pid, cwd, custom = null }) {
+export async function focusProcess({ pid, cwd, sessionId, custom = null }) {
   if (!pid) return { ok: false, reason: 'no process id for this session' };
   const tty = await ttyOf(pid);
   const terminal = custom ? null : await detectTerminal(pid);
@@ -115,7 +115,7 @@ export async function focusProcess({ pid, cwd, custom = null }) {
     try { activeWorkspace = parseWezTermClients((await run('wezterm', ['cli', 'list-clients', '--format', 'json'])).stdout); } catch { /* ignore */ }
   }
   if (terminal === 'tmux') { try { tmuxPanes = (await run('tmux', ['list-panes', '-a', '-F', '#{pane_tty} #{session_name}:#{window_index}.#{pane_index}'])).stdout; } catch { /* no server */ } }
-  const plan = planFocus({ terminal, tty, pid, cwd, panes, tmuxPanes, custom, activeWorkspace });
+  const plan = planFocus({ terminal, tty, pid, cwd, sessionId, panes, tmuxPanes, custom, activeWorkspace });
   if (!plan.length) return { ok: false, reason: terminal ? `no way to focus a ${terminal} pane` : 'could not tell which terminal runs this session', tty, terminal };
   for (const [cmd, ...args] of plan) {
     try { await run(cmd, args, { timeout: 5000 }); } catch (err) { return { ok: false, reason: `${cmd} failed: ${String(err.stderr || err.message).trim().slice(0, 200)}`, tty, terminal }; }

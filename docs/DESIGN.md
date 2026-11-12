@@ -61,7 +61,7 @@ Triggered automatically when a live session is first seen, whenever it enters `d
 
 ## Terminal focus
 
-`focus.mjs` maps a session's pid to its tty (`ps`), walks the process tree to find the hosting terminal, and builds a command plan per terminal (WezTerm CLI by tty, AppleScript for iTerm2 and Terminal.app, tmux by pane tty, kitty by env match, otherwise raise the app). A `focusCommand` setting overrides detection.
+`focus.mjs` maps a session's pid to its tty (`ps`), walks the process tree to find the hosting terminal, and builds a command plan per terminal (WezTerm CLI by tty, AppleScript for iTerm2 and Terminal.app, tmux by pane tty, kitty by env match, otherwise raise the app). A `focusCommand` setting overrides detection: a shell template whose `{tty}`, `{pid}`, `{cwd}` and `{sessionId}` are filled in shell-quoted (the session id is passed down from the store, since everything else is derived from the pid).
 
 ## Web
 

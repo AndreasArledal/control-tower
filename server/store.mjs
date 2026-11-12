@@ -327,7 +327,7 @@ export class TowerStore extends EventEmitter {
   focus(id) {
     const s = this.sessions.get(id);
     if (!s || !s.alive) return { ok: false, reason: 'session is not running' };
-    return focusProcess({ pid: s.pid, cwd: s.cwd, custom: this.settings.focusCommand || null });
+    return focusProcess({ pid: s.pid, cwd: s.cwd, sessionId: id, custom: this.settings.focusCommand || null });
   }
 
   setSettings(patch) { this.settings = { ...this.settings, ...patch }; this._saveState(); this._dirty(); }
