@@ -32,8 +32,8 @@ test('tmux: selects the pane by tty', () => {
 });
 
 test('a custom command template wins over detection', () => {
-  const plan = planFocus({ custom: 'myfocus --tty {tty} --pid {pid} --cwd {cwd}', tty: 'ttys003', pid: 42, cwd: '/p a', platform: 'darwin' });
-  assert.deepEqual(plan, [['sh', '-c', 'myfocus --tty ttys003 --pid 42 --cwd /p\\ a']]);
+  const plan = planFocus({ custom: 'myfocus --tty {tty} --pid {pid} --cwd {cwd} --session {sessionId}', tty: 'ttys003', pid: 42, cwd: '/p a', sessionId: 'abc-123', platform: 'darwin' });
+  assert.deepEqual(plan, [['sh', '-c', 'myfocus --tty ttys003 --pid 42 --cwd /p\\ a --session abc-123']]);
 });
 
 test('unknown terminal with a known app still raises the app', () => {

@@ -21,7 +21,7 @@ Control Tower keeps its own state under `control-tower/` in the same dir: the ho
 
 Memory is bounded for processes that run for days: a window of entries per transcript, a cap on the ids kept for matching tool results and agent parents, a capped summary cache, and expiry of exited sessions after six hours.
 
-Terminal focusing exists on the API (`POST /api/session/<id>/focus`, for WezTerm, iTerm2, Terminal.app, tmux and kitty, with a `focusCommand` setting to override) but not in the page, since WezTerm cannot switch workspaces from the CLI.
+Terminal focusing exists on the API (`POST /api/session/<id>/focus`, for WezTerm, iTerm2, Terminal.app, tmux and kitty, with a `focusCommand` setting to override; it is a shell command template that can use `{tty}`, `{pid}`, `{cwd}` and `{sessionId}`) but not in the page, since WezTerm cannot switch workspaces from the CLI.
 
 ## The page
 
